@@ -1,0 +1,226 @@
+import { UnauthorizedException } from '@nestjs/common';
+import * as argon2 from 'argon2';
+import { Response } from 'express';
+import { IdentityRepository } from './identity.repository';
+import { AuthService } from './identity.service';
+import { TokenService } from './token.service';
+
+jest.mock('argon2');
+
+function mockResponse(): jest.Mocked<Response> {
+  return { cookie: jest.fn() } as unknown as jest.Mocked<Response>;
+}
+
+const activeMembership = {
+  id: 'membership-1',
+  userId: 'user-1',
+  tenantId: 'tenant-1',
+  roleId: 'role-1',
+  status: 'ACTIVE',
+  role: { id: 'role-1', key: 'OWNER', name: 'Owner' },
+};
+
+const user = {
+  id: 'user-1',
+  email: 'owner@barney.test',
+  passwordHash: 'hashed',
+  status: 'ACTIVE',
+  tokenVersion: 0,
+};
+
+describe('AuthService', () => {
+  let repository: jest.Mocked<IdentityRepository>;
+  let tokenService: jest.Mocked<TokenService>;
+  let service: AuthService;
+  let res: jest.Mocked<Response>;
+
+  beforeEach(() => {
+    repository = {
+      findUserByEmail: jest.fn(),
+      findUserById: jest.fn(),
+      findActiveMembershipsForUser: jest.fn(),
+      createRefreshToken: jest.fn(),
+      findRefreshTokenByHash: jest.fn(),
+      rotateRefreshToken: jest.fn(),
+      revokeAllActiveRefreshTokensForUser: jest.fn(),
+    } as unknown as jest.Mocked<IdentityRepository>;
+
+    tokenService = {
+      signAccessToken: jest.fn().mockResolvedValue('signed-access-token'),
+      generateRefreshToken: jest
+        .fn()
+        .mockReturnValue({ token: 'raw-refresh-token', hash: 'hashed-refresh-token' }),
+      hashToken: jest.fn().mockReturnValue('hashed-refresh-token'),
+      refreshTokenExpiresAt: jest.fn().mockReturnValue(new Date(Date.now() + 1000)),
+      accessTokenTtlMs: jest.fn().mockReturnValue(900_000),
+      refreshTokenTtlMs: jest.fn().mockReturnValue(2_592_000_000),
+    } as unknown as jest.Mocked<TokenService>;
+
+    service = new AuthService(repository, tokenService);
+    res = mockResponse();
+    process.env.COOKIE_SECURE = 'false';
+    jest.clearAllMocks();
+    (argon2.verify as jest.Mock).mockReset();
+  });
+
+  describe('login', () => {
+    it('succeeds with correct credentials and issues tokens', async () => {
+      repository.findUserByEmail.mockResolvedValue(user as never);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      repository.findActiveMembershipsForUser.mockResolvedValue([activeMembership] as never);
+
+      const profile = await service.login({ email: user.email, password: 'correct' }, res);
+
+      expect(profile).toEqual({
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        role: 'OWNER',
+        email: 'owner@barney.test',
+      });
+      expect(repository.createRefreshToken).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1', tokenHash: 'hashed-refresh-token', tokenVersion: 0 }),
+      );
+      expect(res.cookie).toHaveBeenCalledWith('access_token', 'signed-access-token', expect.any(Object));
+      expect(res.cookie).toHaveBeenCalledWith('refresh_token', 'raw-refresh-token', expect.any(Object));
+    });
+
+    it('rejects an unknown email with a generic message (no user enumeration)', async () => {
+      repository.findUserByEmail.mockResolvedValue(null);
+
+      await expect(service.login({ email: 'nobody@x.com', password: 'x' }, res)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(service.login({ email: 'nobody@x.com', password: 'x' }, res)).rejects.toThrow(
+        'Invalid credentials',
+      );
+      expect(argon2.verify).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid password with the same generic message', async () => {
+      repository.findUserByEmail.mockResolvedValue(user as never);
+      (argon2.verify as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.login({ email: user.email, password: 'wrong' }, res)).rejects.toThrow(
+        'Invalid credentials',
+      );
+      expect(repository.findActiveMembershipsForUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the user has no active membership anywhere', async () => {
+      repository.findUserByEmail.mockResolvedValue(user as never);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      repository.findActiveMembershipsForUser.mockResolvedValue([] as never);
+
+      await expect(service.login({ email: user.email, password: 'correct' }, res)).rejects.toThrow(
+        'No active tenant access',
+      );
+    });
+
+    it('selects the first membership deterministically when multiple active memberships exist', async () => {
+      const secondMembership = {
+        ...activeMembership,
+        id: 'membership-2',
+        tenantId: 'tenant-2',
+        role: { id: 'role-2', key: 'STAFF', name: 'Staff' },
+      };
+      repository.findUserByEmail.mockResolvedValue(user as never);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      repository.findActiveMembershipsForUser.mockResolvedValue([
+        activeMembership,
+        secondMembership,
+      ] as never);
+
+      const profile = await service.login({ email: user.email, password: 'correct' }, res);
+
+      expect(profile.tenantId).toBe('tenant-1');
+      expect(profile.role).toBe('OWNER');
+    });
+  });
+
+  describe('refresh', () => {
+    const storedToken = {
+      id: 'token-1',
+      userId: 'user-1',
+      tokenHash: 'hashed-refresh-token',
+      tokenVersion: 0,
+      expiresAt: new Date(Date.now() + 100_000),
+      revokedAt: null,
+      replacedByTokenId: null,
+    };
+
+    it('rejects when no refresh token is presented', async () => {
+      await expect(service.refresh(undefined, res)).rejects.toThrow('Missing refresh token');
+    });
+
+    it('rejects when the presented token does not match any stored hash', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue(null);
+
+      await expect(service.refresh('raw-refresh-token', res)).rejects.toThrow('Invalid refresh token');
+    });
+
+    it('rotates successfully for a valid, unused token', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue(storedToken as never);
+      repository.findUserById.mockResolvedValue(user as never);
+      repository.findActiveMembershipsForUser.mockResolvedValue([activeMembership] as never);
+      repository.createRefreshToken.mockResolvedValue({ id: 'token-2' } as never);
+
+      const profile = await service.refresh('raw-refresh-token', res);
+
+      expect(profile.userId).toBe('user-1');
+      expect(repository.rotateRefreshToken).toHaveBeenCalledWith('token-1', 'token-2');
+      expect(repository.revokeAllActiveRefreshTokensForUser).not.toHaveBeenCalled();
+    });
+
+    it('detects reuse of an already-rotated token and revokes the whole chain', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue({
+        ...storedToken,
+        revokedAt: new Date(),
+        replacedByTokenId: 'token-2',
+      } as never);
+
+      await expect(service.refresh('raw-refresh-token', res)).rejects.toThrow(
+        'Refresh token reuse detected',
+      );
+      expect(repository.revokeAllActiveRefreshTokensForUser).toHaveBeenCalledWith('user-1');
+      // Must not proceed to issue new tokens after reuse is detected.
+      expect(repository.createRefreshToken).not.toHaveBeenCalled();
+    });
+
+    it('rejects a revoked-but-not-rotated token (e.g. from a mass revocation) without treating it as reuse', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue({
+        ...storedToken,
+        revokedAt: new Date(),
+        replacedByTokenId: null,
+      } as never);
+
+      await expect(service.refresh('raw-refresh-token', res)).rejects.toThrow('Invalid refresh token');
+      expect(repository.revokeAllActiveRefreshTokensForUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects an expired token', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue({
+        ...storedToken,
+        expiresAt: new Date(Date.now() - 1000),
+      } as never);
+
+      await expect(service.refresh('raw-refresh-token', res)).rejects.toThrow('Invalid refresh token');
+    });
+
+    it('rejects when the stored token_version no longer matches the user (e.g. password changed)', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue(storedToken as never);
+      repository.findUserById.mockResolvedValue({ ...user, tokenVersion: 1 } as never);
+
+      await expect(service.refresh('raw-refresh-token', res)).rejects.toThrow(
+        'Refresh token invalidated',
+      );
+    });
+
+    it('rejects when the user no longer has any active membership', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue(storedToken as never);
+      repository.findUserById.mockResolvedValue(user as never);
+      repository.findActiveMembershipsForUser.mockResolvedValue([] as never);
+
+      await expect(service.refresh('raw-refresh-token', res)).rejects.toThrow('No active tenant access');
+    });
+  });
+});
