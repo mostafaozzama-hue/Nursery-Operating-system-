@@ -6,3 +6,124 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// created_by/updated_by/deleted_by are audit-only pointers, deliberately not
+// modeled as Prisma relations (no enforced FK) to avoid a back-reference
+// array on User for every audited table.
+model Tenant {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  status    String    @default("ACTIVE")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.Uuid
+
+  memberships TenantMembership[]
+  roles       Role[]
+
+  @@index([status])
+  @@map("tenants")
+}
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String
+  passwordHash String    @map("password_hash")
+  status       String    @default("ACTIVE")
+  tokenVersion Int       @default(0) @map("token_version")
+  createdBy    String?   @map("created_by") @db.Uuid
+  updatedBy    String?   @map("updated_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+  deletedBy    String?   @map("deleted_by") @db.Uuid
+
+  memberships         TenantMembership[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key       String
+  name      String
+  tenantId  String?   @map("tenant_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  tenant      Tenant?            @relation(fields: [tenantId], references: [id])
+  memberships TenantMembership[]
+
+  @@map("roles")
+}
+
+model TenantMembership {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  roleId          String    @map("role_id") @db.Uuid
+  status          String    @default("INVITED")
+  inviteTokenHash String?   @map("invite_token_hash")
+  inviteExpiresAt DateTime? @map("invite_expires_at")
+  invitedAt       DateTime? @map("invited_at")
+  activatedAt     DateTime? @map("activated_at")
+  revokedAt       DateTime? @map("revoked_at")
+  createdBy       String?   @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  deletedBy       String?   @map("deleted_by") @db.Uuid
+
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@map("tenant_memberships")
+}
+
+model RefreshToken {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  tokenHash         String    @unique @map("token_hash")
+  tokenVersion      Int       @map("token_version")
+  expiresAt         DateTime  @map("expires_at")
+  revokedAt         DateTime? @map("revoked_at")
+  replacedByTokenId String?   @unique @map("replaced_by_token_id") @db.Uuid
+  userAgent         String?   @map("user_agent")
+  ipAddress         String?   @map("ip_address") @db.Inet
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  user            User          @relation(fields: [userId], references: [id])
+  replacedByToken RefreshToken? @relation("RefreshTokenChain", fields: [replacedByTokenId], references: [id])
+  replacesToken   RefreshToken? @relation("RefreshTokenChain")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
