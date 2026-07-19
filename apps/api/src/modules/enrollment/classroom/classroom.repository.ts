@@ -27,10 +27,10 @@ interface UpsertData {
 export class ClassroomRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(tenantId: string, data: { name: string; capacity: number }) {
+  create(tenantId: string, data: { name: string; capacity: number }, createdBy: string) {
     return withTenantContext(this.prisma, tenantId, (tx) =>
       tx.classroom.create({
-        data: { tenantId, name: data.name, capacity: data.capacity },
+        data: { tenantId, name: data.name, capacity: data.capacity, createdBy },
       }),
     );
   }
@@ -73,7 +73,7 @@ export class ClassroomRepository {
     });
   }
 
-  update(tenantId: string, id: string, data: UpsertData) {
+  update(tenantId: string, id: string, data: UpsertData, updatedBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const existing = await tx.classroom.findFirst({
         where: { id, tenantId, deletedAt: null },
@@ -83,11 +83,11 @@ export class ClassroomRepository {
         throw new ClassroomNotFoundError(id);
       }
 
-      return tx.classroom.update({ where: { id }, data });
+      return tx.classroom.update({ where: { id }, data: { ...data, updatedBy } });
     });
   }
 
-  softDelete(tenantId: string, id: string) {
+  softDelete(tenantId: string, id: string, deletedBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const existing = await tx.classroom.findFirst({
         where: { id, tenantId, deletedAt: null },
@@ -99,7 +99,7 @@ export class ClassroomRepository {
 
       await tx.classroom.update({
         where: { id },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: new Date(), deletedBy },
       });
     });
   }

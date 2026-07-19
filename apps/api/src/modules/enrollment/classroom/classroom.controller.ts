@@ -10,8 +10,12 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../../identity/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../identity/guards/jwt-auth.guard';
+import { RolesGuard } from '../../identity/guards/roles.guard';
 import { ClassroomService } from './classroom.service';
 import { ClassroomQueryDto } from './dto/classroom-query.dto';
 import { ClassroomResponseDto } from './dto/classroom-response.dto';
@@ -20,11 +24,14 @@ import { PaginatedClassroomResponseDto } from './dto/paginated-classroom-respons
 import { UpdateClassroomDto } from './dto/update-classroom.dto';
 
 @ApiTags('classrooms')
+@ApiCookieAuth()
 @Controller('classrooms')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ClassroomController {
   constructor(private readonly classroomService: ClassroomService) {}
 
   @Post()
+  @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Create a classroom' })
   @ApiResponse({ status: 201, type: ClassroomResponseDto })
   create(@Body() dto: CreateClassroomDto) {
@@ -47,6 +54,7 @@ export class ClassroomController {
   }
 
   @Patch(':id')
+  @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Update a classroom' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({ status: 200, type: ClassroomResponseDto })
@@ -55,6 +63,7 @@ export class ClassroomController {
   }
 
   @Delete(':id')
+  @Roles('OWNER', 'ADMIN')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft-delete a classroom' })
   @ApiParam({ name: 'id', format: 'uuid' })

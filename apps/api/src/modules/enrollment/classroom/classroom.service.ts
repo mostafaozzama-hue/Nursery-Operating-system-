@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
 import { ClassroomNotFoundError, ClassroomRepository } from './classroom.repository';
 import { ClassroomQueryDto } from './dto/classroom-query.dto';
@@ -10,11 +11,13 @@ export class ClassroomService {
   constructor(
     private readonly repository: ClassroomRepository,
     private readonly currentTenant: CurrentTenantProvider,
+    private readonly currentUser: CurrentUserProvider,
   ) {}
 
   create(dto: CreateClassroomDto) {
     const tenantId = this.currentTenant.getTenantId();
-    return this.repository.create(tenantId, dto);
+    const userId = this.currentUser.getUserId();
+    return this.repository.create(tenantId, dto, userId);
   }
 
   async findAll(query: ClassroomQueryDto) {
@@ -41,14 +44,16 @@ export class ClassroomService {
 
   async update(id: string, dto: UpdateClassroomDto) {
     const tenantId = this.currentTenant.getTenantId();
-    return this.repository.update(tenantId, id, dto).catch((error) => {
+    const userId = this.currentUser.getUserId();
+    return this.repository.update(tenantId, id, dto, userId).catch((error) => {
       throw this.translate(error);
     });
   }
 
   async remove(id: string) {
     const tenantId = this.currentTenant.getTenantId();
-    return this.repository.softDelete(tenantId, id).catch((error) => {
+    const userId = this.currentUser.getUserId();
+    return this.repository.softDelete(tenantId, id, userId).catch((error) => {
       throw this.translate(error);
     });
   }
