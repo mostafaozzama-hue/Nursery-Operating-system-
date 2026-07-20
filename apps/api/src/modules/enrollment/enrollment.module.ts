@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ChildModule } from './child/child.module';
+import { ChildGuardianModule } from './child-guardian/child-guardian.module';
 import { ClassroomModule } from './classroom/classroom.module';
 // Aliased: this file's own class is also EnrollmentModule (the umbrella
 // grouping module) - the entity module keeps the name matching its
@@ -8,6 +9,6 @@ import { EnrollmentModule as EnrollmentRecordModule } from './enrollment/enrollm
 import { GuardianModule } from './guardian/guardian.module';
 
 @Module({
-  imports: [ClassroomModule, ChildModule, EnrollmentRecordModule, GuardianModule],
+  imports: [ClassroomModule, ChildModule, EnrollmentRecordModule, GuardianModule, ChildGuardianModule],
 })
 export class EnrollmentModule {}
