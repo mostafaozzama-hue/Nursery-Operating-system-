@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { Prisma } from '@nursery-os/database';
 import * as argon2 from 'argon2';
 import { Response } from 'express';
+import { isUniqueConstraintViolation } from '../../common/errors/is-unique-constraint-violation';
 import { CurrentUserResponseDto } from './dto/current-user-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -32,7 +32,7 @@ export class AuthService {
         roleId: ownerRole.id,
       });
     } catch (error) {
-      if (this.isUniqueConstraintViolation(error)) {
+      if (isUniqueConstraintViolation(error)) {
         throw new ConflictException('Email already in use');
       }
       throw error;
@@ -154,10 +154,6 @@ export class AuthService {
 
     this.setAuthCookies(res, accessToken, refreshToken);
     return this.toProfile(claims);
-  }
-
-  private isUniqueConstraintViolation(error: unknown): boolean {
-    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
   }
 
   private setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
