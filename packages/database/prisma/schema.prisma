@@ -220,8 +220,10 @@ model Enrollment {
   child     Child      @relation(fields: [childId], references: [id])
   classroom Classroom? @relation(fields: [classroomId], references: [id])
 
-  // Partial unique, deferred to migration SQL:
-  // UNIQUE (child_id) WHERE end_date IS NULL AND deleted_at IS NULL
+  // Partial unique index enrollments_child_id_open_unique (child_id, WHERE
+  // end_date IS NULL AND deleted_at IS NULL) and CHECK constraint
+  // enrollments_date_range_valid live in migration
+  // 20260720125319_add_enrollment_constraints - not expressible in Prisma DSL.
   @@index([tenantId])
   @@index([childId])
   @@index([classroomId])
@@ -248,9 +250,9 @@ model Guardian {
   children ChildGuardian[]
   invoices Invoice[]
 
-  // TODO(migration): partial unique, deferred to migration SQL:
-  // UNIQUE (tenant_id, user_id) WHERE deleted_at IS NULL
-  // At most one active Guardian profile per user, per tenant. Not a global
+  // Partial unique index guardians_tenant_user_unique_active (tenant_id,
+  // user_id, WHERE deleted_at IS NULL) lives in migration add_domain_model -
+  // at most one active Guardian profile per user, per tenant. Not a global
   // UNIQUE(user_id) - the same user may legitimately have profiles in
   // different tenants.
   @@index([tenantId])
@@ -307,9 +309,9 @@ model Staff {
   user      User?      @relation(fields: [userId], references: [id])
   classroom Classroom? @relation(fields: [classroomId], references: [id])
 
-  // TODO(migration): partial unique, deferred to migration SQL:
-  // UNIQUE (tenant_id, user_id) WHERE deleted_at IS NULL
-  // At most one active Staff profile per user, per tenant. Not a global
+  // Partial unique index staff_tenant_user_unique_active (tenant_id,
+  // user_id, WHERE deleted_at IS NULL) lives in migration add_domain_model -
+  // at most one active Staff profile per user, per tenant. Not a global
   // UNIQUE(user_id) - the same user may legitimately have profiles in
   // different tenants.
   @@index([tenantId])
