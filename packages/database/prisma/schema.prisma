@@ -283,8 +283,12 @@ model ChildGuardian {
   child    Child    @relation(fields: [childId], references: [id])
   guardian Guardian @relation(fields: [guardianId], references: [id])
 
-  // Partial unique, deferred to migration SQL:
-  // UNIQUE (child_id, guardian_id) WHERE deleted_at IS NULL
+  // Partial unique index child_guardians_child_guardian_unique_active
+  // (child_id, guardian_id, WHERE deleted_at IS NULL) lives in migration
+  // add_domain_model. child_guardians_one_primary_per_child (child_id,
+  // WHERE is_primary_contact = true AND deleted_at IS NULL) lives in
+  // migration add_child_guardian_primary_contact_unique - at most one
+  // active primary contact per child.
   @@index([tenantId])
   @@index([childId])
   @@index([guardianId])
