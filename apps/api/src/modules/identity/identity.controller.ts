@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { CurrentUserResponseDto } from './dto/current-user-response.dto';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthService } from './identity.service';
 import { JwtPayload } from './types/authenticated-request';
@@ -12,6 +13,17 @@ import { JwtPayload } from './types/authenticated-request';
 @Controller('auth')
 export class IdentityController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('register')
+  @ApiOperation({ summary: 'Register a new tenant and its first OWNER user' })
+  @ApiResponse({ status: 201, type: CurrentUserResponseDto })
+  @ApiResponse({ status: 409, description: 'Email already in use' })
+  register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<CurrentUserResponseDto> {
+    return this.authService.register(dto, res);
+  }
 
   @Post('login')
   @ApiOperation({ summary: 'Log in and receive session cookies' })

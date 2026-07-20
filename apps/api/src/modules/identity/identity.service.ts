@@ -1,8 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@nursery-os/database';
 import * as argon2 from 'argon2';
 import { Response } from 'express';
 import { CurrentUserResponseDto } from './dto/current-user-response.dto';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 import { IdentityRepository } from './identity.repository';
 import { AccessTokenClaims, TokenService } from './token.service';
 
@@ -12,6 +14,41 @@ export class AuthService {
     private readonly repository: IdentityRepository,
     private readonly tokenService: TokenService,
   ) {}
+
+  async register(dto: RegisterDto, res: Response): Promise<CurrentUserResponseDto> {
+    const ownerRole = await this.repository.findSystemRoleId('OWNER');
+    if (!ownerRole) {
+      throw new Error('OWNER system role is not seeded');
+    }
+
+    const passwordHash = await argon2.hash(dto.password);
+
+    let result: Awaited<ReturnType<IdentityRepository['registerTenantOwner']>>;
+    try {
+      result = await this.repository.registerTenantOwner({
+        tenantName: dto.tenantName,
+        email: dto.email,
+        passwordHash,
+        roleId: ownerRole.id,
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintViolation(error)) {
+        throw new ConflictException('Email already in use');
+      }
+      throw error;
+    }
+
+    const claims: AccessTokenClaims = {
+      sub: result.user.id,
+      membershipId: result.membership.id,
+      tenantId: result.tenant.id,
+      role: 'OWNER',
+      tokenVersion: result.user.tokenVersion,
+      email: result.user.email,
+    };
+
+    return this.issueSession(claims, res);
+  }
 
   async login(dto: LoginDto, res: Response): Promise<CurrentUserResponseDto> {
     const user = await this.repository.findUserByEmail(dto.email);
@@ -39,18 +76,7 @@ export class AuthService {
       email: user.email,
     };
 
-    const accessToken = await this.tokenService.signAccessToken(claims);
-    const { token: refreshToken, hash } = this.tokenService.generateRefreshToken();
-
-    await this.repository.createRefreshToken({
-      userId: user.id,
-      tokenHash: hash,
-      tokenVersion: user.tokenVersion,
-      expiresAt: this.tokenService.refreshTokenExpiresAt(),
-    });
-
-    this.setAuthCookies(res, accessToken, refreshToken);
-    return this.toProfile(claims);
+    return this.issueSession(claims, res);
   }
 
   async refresh(refreshTokenValue: string | undefined, res: Response): Promise<CurrentUserResponseDto> {
@@ -112,6 +138,26 @@ export class AuthService {
 
     this.setAuthCookies(res, accessToken, newRefreshToken);
     return this.toProfile(claims);
+  }
+
+  /** Shared by register/login: sign + store + cookie the tokens, return the profile. */
+  private async issueSession(claims: AccessTokenClaims, res: Response): Promise<CurrentUserResponseDto> {
+    const accessToken = await this.tokenService.signAccessToken(claims);
+    const { token: refreshToken, hash } = this.tokenService.generateRefreshToken();
+
+    await this.repository.createRefreshToken({
+      userId: claims.sub,
+      tokenHash: hash,
+      tokenVersion: claims.tokenVersion,
+      expiresAt: this.tokenService.refreshTokenExpiresAt(),
+    });
+
+    this.setAuthCookies(res, accessToken, refreshToken);
+    return this.toProfile(claims);
+  }
+
+  private isUniqueConstraintViolation(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
   }
 
   private setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
