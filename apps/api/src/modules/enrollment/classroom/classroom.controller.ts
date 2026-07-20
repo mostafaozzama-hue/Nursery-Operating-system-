@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiPaginatedResponse } from '../../../common/pagination/api-paginated-response.decorator';
 import { Roles } from '../../identity/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../identity/guards/jwt-auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
@@ -20,7 +21,6 @@ import { ClassroomService } from './classroom.service';
 import { ClassroomQueryDto } from './dto/classroom-query.dto';
 import { ClassroomResponseDto } from './dto/classroom-response.dto';
 import { CreateClassroomDto } from './dto/create-classroom.dto';
-import { PaginatedClassroomResponseDto } from './dto/paginated-classroom-response.dto';
 import { UpdateClassroomDto } from './dto/update-classroom.dto';
 
 @ApiTags('classrooms')
@@ -40,7 +40,7 @@ export class ClassroomController {
 
   @Get()
   @ApiOperation({ summary: 'List classrooms (paginated, filterable, sortable)' })
-  @ApiResponse({ status: 200, type: PaginatedClassroomResponseDto })
+  @ApiPaginatedResponse(ClassroomResponseDto)
   findAll(@Query() query: ClassroomQueryDto) {
     return this.classroomService.findAll(query);
   }

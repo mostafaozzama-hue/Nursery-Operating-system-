@@ -1,14 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
+import { findOrThrow } from '../../../common/repository/find-or-throw';
+import { containsInsensitive } from '../../../common/repository/query-filters.util';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { ClassroomSortField } from './dto/classroom-query.dto';
-
-export class ClassroomNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Classroom ${id} not found`);
-  }
-}
 
 interface FindManyOptions {
   page: number;
@@ -40,9 +36,7 @@ export class ClassroomRepository {
       const where: Prisma.ClassroomWhereInput = {
         tenantId,
         deletedAt: null,
-        ...(options.name
-          ? { name: { contains: options.name, mode: 'insensitive' } }
-          : {}),
+        ...(options.name ? { name: containsInsensitive(options.name) } : {}),
       };
 
       const [items, total] = await Promise.all([
@@ -60,28 +54,18 @@ export class ClassroomRepository {
   }
 
   findOneOrThrow(tenantId: string, id: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      const classroom = await tx.classroom.findFirst({
-        where: { id, tenantId, deletedAt: null },
-      });
-
-      if (!classroom) {
-        throw new ClassroomNotFoundError(id);
-      }
-
-      return classroom;
-    });
+    return withTenantContext(this.prisma, tenantId, (tx) =>
+      findOrThrow('Classroom', id, () =>
+        tx.classroom.findFirst({ where: { id, tenantId, deletedAt: null } }),
+      ),
+    );
   }
 
   update(tenantId: string, id: string, data: UpsertData, updatedBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
-      const existing = await tx.classroom.findFirst({
-        where: { id, tenantId, deletedAt: null },
-      });
-
-      if (!existing) {
-        throw new ClassroomNotFoundError(id);
-      }
+      await findOrThrow('Classroom', id, () =>
+        tx.classroom.findFirst({ where: { id, tenantId, deletedAt: null } }),
+      );
 
       return tx.classroom.update({ where: { id }, data: { ...data, updatedBy } });
     });
@@ -89,13 +73,9 @@ export class ClassroomRepository {
 
   softDelete(tenantId: string, id: string, deletedBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
-      const existing = await tx.classroom.findFirst({
-        where: { id, tenantId, deletedAt: null },
-      });
-
-      if (!existing) {
-        throw new ClassroomNotFoundError(id);
-      }
+      await findOrThrow('Classroom', id, () =>
+        tx.classroom.findFirst({ where: { id, tenantId, deletedAt: null } }),
+      );
 
       await tx.classroom.update({
         where: { id },
