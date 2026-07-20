@@ -5,8 +5,9 @@ import { ClassroomModule } from './classroom/classroom.module';
 // grouping module) - the entity module keeps the name matching its
 // Classroom/Child siblings, so only this import needs disambiguating.
 import { EnrollmentModule as EnrollmentRecordModule } from './enrollment/enrollment.module';
+import { GuardianModule } from './guardian/guardian.module';
 
 @Module({
-  imports: [ClassroomModule, ChildModule, EnrollmentRecordModule],
+  imports: [ClassroomModule, ChildModule, EnrollmentRecordModule, GuardianModule],
 })
 export class EnrollmentModule {}
