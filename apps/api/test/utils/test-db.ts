@@ -47,6 +47,8 @@ export async function createTestMembership(
 export async function cleanupTestData(ids: {
   refreshTokenUserIds?: string[];
   membershipIds?: string[];
+  /** For rows whose membership id isn't known up front (e.g. created via register). */
+  membershipUserIds?: string[];
   classroomIds?: string[];
   userIds?: string[];
   tenantIds?: string[];
@@ -61,6 +63,11 @@ export async function cleanupTestData(ids: {
   }
   if (ids.membershipIds?.length) {
     await superuserPrisma.tenantMembership.deleteMany({ where: { id: { in: ids.membershipIds } } });
+  }
+  if (ids.membershipUserIds?.length) {
+    await superuserPrisma.tenantMembership.deleteMany({
+      where: { userId: { in: ids.membershipUserIds } },
+    });
   }
   if (ids.userIds?.length) {
     await superuserPrisma.user.deleteMany({ where: { id: { in: ids.userIds } } });

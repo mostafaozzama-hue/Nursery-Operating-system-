@@ -1,4 +1,5 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@nursery-os/database';
 import * as argon2 from 'argon2';
 import { Response } from 'express';
 import { IdentityRepository } from './identity.repository';
@@ -43,6 +44,8 @@ describe('AuthService', () => {
       findRefreshTokenByHash: jest.fn(),
       rotateRefreshToken: jest.fn(),
       revokeAllActiveRefreshTokensForUser: jest.fn(),
+      findSystemRoleId: jest.fn(),
+      registerTenantOwner: jest.fn(),
     } as unknown as jest.Mocked<IdentityRepository>;
 
     tokenService = {
@@ -61,6 +64,96 @@ describe('AuthService', () => {
     process.env.COOKIE_SECURE = 'false';
     jest.clearAllMocks();
     (argon2.verify as jest.Mock).mockReset();
+    (argon2.hash as jest.Mock).mockReset();
+  });
+
+  describe('register', () => {
+    const ownerRole = { id: 'role-1', key: 'OWNER', name: 'Owner', tenantId: null };
+    const registerResult = {
+      tenant: { id: 'tenant-1', name: 'Barney Home Nursery' },
+      user: { id: 'user-1', email: 'owner@barney.test', tokenVersion: 0 },
+      membership: { id: 'membership-1', tenantId: 'tenant-1', userId: 'user-1' },
+    };
+
+    it('bootstraps a tenant + OWNER user + membership and issues tokens', async () => {
+      repository.findSystemRoleId.mockResolvedValue(ownerRole as never);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      repository.registerTenantOwner.mockResolvedValue(registerResult as never);
+
+      const profile = await service.register(
+        { tenantName: 'Barney Home Nursery', email: 'owner@barney.test', password: 'CorrectHorseBattery1' },
+        res,
+      );
+
+      expect(repository.findSystemRoleId).toHaveBeenCalledWith('OWNER');
+      expect(argon2.hash).toHaveBeenCalledWith('CorrectHorseBattery1');
+      expect(repository.registerTenantOwner).toHaveBeenCalledWith({
+        tenantName: 'Barney Home Nursery',
+        email: 'owner@barney.test',
+        passwordHash: 'hashed-password',
+        roleId: 'role-1',
+      });
+      expect(profile).toEqual({
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        role: 'OWNER',
+        email: 'owner@barney.test',
+      });
+      expect(repository.createRefreshToken).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1', tokenVersion: 0 }),
+      );
+      expect(res.cookie).toHaveBeenCalledWith('access_token', 'signed-access-token', expect.any(Object));
+      expect(res.cookie).toHaveBeenCalledWith('refresh_token', 'raw-refresh-token', expect.any(Object));
+    });
+
+    it('translates a duplicate email into a 409 Conflict, not a raw database error', async () => {
+      repository.findSystemRoleId.mockResolvedValue(ownerRole as never);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      repository.registerTenantOwner.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: '5.22.0',
+        }),
+      );
+
+      await expect(
+        service.register(
+          { tenantName: 'Barney Home Nursery', email: 'owner@barney.test', password: 'CorrectHorseBattery1' },
+          res,
+        ),
+      ).rejects.toThrow(ConflictException);
+      await expect(
+        service.register(
+          { tenantName: 'Barney Home Nursery', email: 'owner@barney.test', password: 'CorrectHorseBattery1' },
+          res,
+        ),
+      ).rejects.toThrow('Email already in use');
+    });
+
+    it('propagates unrelated errors unchanged (not swallowed as a conflict)', async () => {
+      repository.findSystemRoleId.mockResolvedValue(ownerRole as never);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      repository.registerTenantOwner.mockRejectedValue(new Error('connection lost'));
+
+      await expect(
+        service.register(
+          { tenantName: 'Barney Home Nursery', email: 'owner@barney.test', password: 'CorrectHorseBattery1' },
+          res,
+        ),
+      ).rejects.toThrow('connection lost');
+    });
+
+    it('throws if the OWNER system role is not seeded', async () => {
+      repository.findSystemRoleId.mockResolvedValue(null as never);
+
+      await expect(
+        service.register(
+          { tenantName: 'Barney Home Nursery', email: 'owner@barney.test', password: 'CorrectHorseBattery1' },
+          res,
+        ),
+      ).rejects.toThrow('OWNER system role is not seeded');
+      expect(repository.registerTenantOwner).not.toHaveBeenCalled();
+    });
   });
 
   describe('login', () => {
