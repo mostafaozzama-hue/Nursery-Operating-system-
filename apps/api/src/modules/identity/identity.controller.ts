@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -45,6 +45,14 @@ export class IdentityController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<CurrentUserResponseDto> {
     return this.authService.refresh(req.cookies?.refresh_token, res);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Log out the current session (revokes only this refresh token, not other devices)' })
+  @ApiResponse({ status: 204 })
+  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
+    return this.authService.logout(req.cookies?.refresh_token, res);
   }
 
   @Get('me')

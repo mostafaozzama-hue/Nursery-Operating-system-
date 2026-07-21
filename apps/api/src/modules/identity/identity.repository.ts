@@ -22,12 +22,22 @@ export class IdentityRepository {
     });
   }
 
-  /** Bootstraps tenant resolution: no tenant context exists yet at this point. */
+  /**
+   * Bootstraps tenant resolution: no tenant context exists yet at this
+   * point. Ordered deterministically (earliest activatedAt, id as a stable
+   * tie-breaker) - a user can legitimately hold active memberships in more
+   * than one tenant (e.g. invited into a second nursery), and without an
+   * explicit order Postgres/Prisma give no guarantee which one comes back
+   * first, so which tenant a multi-membership user lands in could vary
+   * between logins. Real tenant-selection UX is a future product feature;
+   * this just makes today's single-membership-picked behavior predictable.
+   */
   findActiveMembershipsForUser(userId: string) {
     return withUserContext(this.prisma, userId, (tx) =>
       tx.tenantMembership.findMany({
         where: { userId, status: 'ACTIVE', deletedAt: null },
         include: { role: true },
+        orderBy: [{ activatedAt: 'asc' }, { id: 'asc' }],
       }),
     );
   }
@@ -97,6 +107,14 @@ export class IdentityRepository {
   async revokeAllActiveRefreshTokensForUser(userId: string) {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  /** Single-session revocation for logout - deliberately narrower than revokeAllActiveRefreshTokensForUser. Idempotent: a no-op if already revoked. */
+  async revokeRefreshTokenById(id: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }

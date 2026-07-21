@@ -113,7 +113,7 @@ describe('Identity auth flows (e2e)', () => {
       expect(res.status).toBe(400);
     });
 
-    it('logs in a user with multiple active memberships deterministically (first membership)', async () => {
+    it('logs in a user with multiple active memberships deterministically (earliest activatedAt wins)', async () => {
       const first = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: multiEmail, password });
@@ -123,11 +123,14 @@ describe('Identity auth flows (e2e)', () => {
 
       expect(first.status).toBe(201);
       expect(second.status).toBe(201);
-      // Whichever tenant it picks, it must be consistent across logins - not
-      // randomly different each time.
-      expect(first.body.tenantId).toBe(second.body.tenantId);
-      expect(first.body.role).toBe(second.body.role);
-      expect([tenantAId, tenantBId]).toContain(first.body.tenantId);
+      // membershipA was created (and thus activated) before membershipB in
+      // beforeAll - findActiveMembershipsForUser orders by activatedAt asc,
+      // so tenant A must win, consistently, every time - not an arbitrary
+      // pick that merely happens to be stable within one test run.
+      expect(first.body.tenantId).toBe(tenantAId);
+      expect(first.body.role).toBe('ADMIN');
+      expect(second.body.tenantId).toBe(tenantAId);
+      expect(second.body.role).toBe('ADMIN');
     });
   });
 
@@ -270,6 +273,48 @@ describe('Identity auth flows (e2e)', () => {
         .set('Cookie', [`refresh_token=${secondRefreshToken}`]);
 
       expect(secondUseRes.status).toBe(401);
+    });
+  });
+
+  describe('POST /auth/logout', () => {
+    it('revokes only the current session, clears cookies, and is idempotent', async () => {
+      const agent = request.agent(app.getHttpServer());
+      const loginRes = await agent.post('/auth/login').send({ email, password });
+      expect(loginRes.status).toBe(201);
+
+      const logoutRes = await agent.post('/auth/logout');
+      expect(logoutRes.status).toBe(204);
+      const clearedCookies = logoutRes.headers['set-cookie'] as unknown as string[];
+      expect(clearedCookies.some((c) => c.startsWith('access_token=;') || /access_token=;/.test(c))).toBe(
+        true,
+      );
+
+      // The revoked refresh token can no longer be used to refresh.
+      const refreshAfterLogoutRes = await agent.post('/auth/refresh');
+      expect(refreshAfterLogoutRes.status).toBe(401);
+
+      // Logging out again (no session left) is not an error.
+      const secondLogoutRes = await agent.post('/auth/logout');
+      expect(secondLogoutRes.status).toBe(204);
+    });
+
+    it('does not affect a different session for the same user', async () => {
+      const agentA = request.agent(app.getHttpServer());
+      const agentB = request.agent(app.getHttpServer());
+      await agentA.post('/auth/login').send({ email, password });
+      await agentB.post('/auth/login').send({ email, password });
+
+      const logoutRes = await agentA.post('/auth/logout');
+      expect(logoutRes.status).toBe(204);
+
+      // Session B is untouched by session A's logout.
+      const refreshBRes = await agentB.post('/auth/refresh');
+      expect(refreshBRes.status).toBe(201);
+    });
+
+    it('works with no prior session at all', async () => {
+      const res = await request(app.getHttpServer()).post('/auth/logout');
+      expect(res.status).toBe(204);
     });
   });
 });

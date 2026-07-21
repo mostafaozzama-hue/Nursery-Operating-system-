@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as argon2 from 'argon2';
+import { randomBytes } from 'crypto';
 import { Response } from 'express';
 import { isUniqueConstraintViolation } from '../../common/errors/is-unique-constraint-violation';
 import { CurrentUserResponseDto } from './dto/current-user-response.dto';
@@ -10,10 +11,20 @@ import { AccessTokenClaims, TokenService } from './token.service';
 
 @Injectable()
 export class AuthService {
+  private dummyPasswordHash: Promise<string> | undefined;
+
   constructor(
     private readonly repository: IdentityRepository,
     private readonly tokenService: TokenService,
   ) {}
+
+  /** Computed once per process and cached - a fixed, never-matchable hash used purely to equalize login's timing cost. */
+  private getDummyPasswordHash(): Promise<string> {
+    if (!this.dummyPasswordHash) {
+      this.dummyPasswordHash = argon2.hash(randomBytes(32).toString('hex'));
+    }
+    return this.dummyPasswordHash;
+  }
 
   async register(dto: RegisterDto, res: Response): Promise<CurrentUserResponseDto> {
     const ownerRole = await this.repository.findSystemRoleId('OWNER');
@@ -53,7 +64,13 @@ export class AuthService {
 
   async login(dto: LoginDto, res: Response): Promise<CurrentUserResponseDto> {
     const user = await this.repository.findUserByEmail(dto.email);
+
     if (!user) {
+      // Still pay the argon2 cost even though there's nothing real to check
+      // against - otherwise a nonexistent email returns measurably faster
+      // than a wrong password, letting an attacker enumerate registered
+      // emails by timing alone.
+      await argon2.verify(await this.getDummyPasswordHash(), dto.password);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -141,6 +158,27 @@ export class AuthService {
     return this.toProfile(claims);
   }
 
+  /**
+   * Revokes only the current session's refresh token (not "log out
+   * everywhere") and clears cookies. Deliberately takes no JwtAuthGuard at
+   * the controller level - must work even with an already-expired access
+   * token, matching how refresh() also works directly off the cookie. Note
+   * this does not invalidate an already-issued access token before its own
+   * short TTL elapses; JwtStrategy verifies signature+expiry only, with no
+   * live DB check per request.
+   */
+  async logout(refreshTokenValue: string | undefined, res: Response): Promise<void> {
+    if (refreshTokenValue) {
+      const hash = this.tokenService.hashToken(refreshTokenValue);
+      const existing = await this.repository.findRefreshTokenByHash(hash);
+      if (existing) {
+        await this.repository.revokeRefreshTokenById(existing.id);
+      }
+    }
+
+    this.clearAuthCookies(res);
+  }
+
   /** Shared by register/login: sign + store + cookie the tokens, return the profile. */
   private async issueSession(claims: AccessTokenClaims, res: Response): Promise<CurrentUserResponseDto> {
     const accessToken = await this.tokenService.signAccessToken(claims);
@@ -173,6 +211,11 @@ export class AuthService {
       sameSite: 'strict',
       maxAge: this.tokenService.refreshTokenTtlMs(),
     });
+  }
+
+  private clearAuthCookies(res: Response): void {
+    res.clearCookie('access_token');
+    res.clearCookie('refresh_token');
   }
 
   private toProfile(claims: AccessTokenClaims): CurrentUserResponseDto {

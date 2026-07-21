@@ -9,7 +9,7 @@ import { TokenService } from './token.service';
 jest.mock('argon2');
 
 function mockResponse(): jest.Mocked<Response> {
-  return { cookie: jest.fn() } as unknown as jest.Mocked<Response>;
+  return { cookie: jest.fn(), clearCookie: jest.fn() } as unknown as jest.Mocked<Response>;
 }
 
 const activeMembership = {
@@ -44,6 +44,7 @@ describe('AuthService', () => {
       findRefreshTokenByHash: jest.fn(),
       rotateRefreshToken: jest.fn(),
       revokeAllActiveRefreshTokensForUser: jest.fn(),
+      revokeRefreshTokenById: jest.fn(),
       findSystemRoleId: jest.fn(),
       registerTenantOwner: jest.fn(),
     } as unknown as jest.Mocked<IdentityRepository>;
@@ -186,7 +187,17 @@ describe('AuthService', () => {
       await expect(service.login({ email: 'nobody@x.com', password: 'x' }, res)).rejects.toThrow(
         'Invalid credentials',
       );
-      expect(argon2.verify).not.toHaveBeenCalled();
+    });
+
+    it('still performs an argon2 verification for an unknown email, to equalize timing with a wrong-password rejection', async () => {
+      repository.findUserByEmail.mockResolvedValue(null);
+
+      await expect(service.login({ email: 'nobody@x.com', password: 'x' }, res)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(argon2.hash).toHaveBeenCalled();
+      expect(argon2.verify).toHaveBeenCalled();
     });
 
     it('rejects an invalid password with the same generic message', async () => {
@@ -314,6 +325,38 @@ describe('AuthService', () => {
       repository.findActiveMembershipsForUser.mockResolvedValue([] as never);
 
       await expect(service.refresh('raw-refresh-token', res)).rejects.toThrow('No active tenant access');
+    });
+  });
+
+  describe('logout', () => {
+    it('revokes only the matching refresh token and clears both cookies', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue({ id: 'refresh-token-1' } as never);
+
+      await service.logout('raw-refresh-token', res);
+
+      expect(tokenService.hashToken).toHaveBeenCalledWith('raw-refresh-token');
+      expect(repository.revokeRefreshTokenById).toHaveBeenCalledWith('refresh-token-1');
+      expect(res.clearCookie).toHaveBeenCalledWith('access_token');
+      expect(res.clearCookie).toHaveBeenCalledWith('refresh_token');
+    });
+
+    it('is idempotent when no refresh token cookie is present', async () => {
+      await service.logout(undefined, res);
+
+      expect(repository.findRefreshTokenByHash).not.toHaveBeenCalled();
+      expect(repository.revokeRefreshTokenById).not.toHaveBeenCalled();
+      expect(res.clearCookie).toHaveBeenCalledWith('access_token');
+      expect(res.clearCookie).toHaveBeenCalledWith('refresh_token');
+    });
+
+    it('is idempotent when the refresh token does not match any stored session', async () => {
+      repository.findRefreshTokenByHash.mockResolvedValue(null);
+
+      await service.logout('unknown-token', res);
+
+      expect(repository.revokeRefreshTokenById).not.toHaveBeenCalled();
+      expect(res.clearCookie).toHaveBeenCalledWith('access_token');
+      expect(res.clearCookie).toHaveBeenCalledWith('refresh_token');
     });
   });
 });
