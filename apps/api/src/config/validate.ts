@@ -20,6 +20,19 @@ function assertCookieSecureInProduction(config: EnvironmentVariables): void {
   }
 }
 
+// CORS is combined with credentials: true, so a wildcard origin is never a
+// valid value here regardless of environment - reject it at boot rather
+// than let it reach enableCors(). Checks for any `*` character, not just an
+// exact "*" element, so subdomain-glob patterns like "*.example.com" are
+// caught too - the underlying cors package doesn't expand those into a
+// live grant for plain string entries, but the config itself is still not
+// something we've decided to support.
+function assertNoWildcardOrigins(config: EnvironmentVariables): void {
+  if (config.CORS_ALLOWED_ORIGINS.some((origin) => origin.includes('*'))) {
+    throw new Error('CORS_ALLOWED_ORIGINS must not contain a wildcard (*)');
+  }
+}
+
 export function validate(config: Record<string, unknown>): EnvironmentVariables {
   const validatedConfig = plainToInstance(EnvironmentVariables, config, {
     enableImplicitConversion: false,
@@ -33,6 +46,7 @@ export function validate(config: Record<string, unknown>): EnvironmentVariables 
   assertValidPemKey(validatedConfig.JWT_ACCESS_TOKEN_PRIVATE_KEY, 'JWT_ACCESS_TOKEN_PRIVATE_KEY');
   assertValidPemKey(validatedConfig.JWT_ACCESS_TOKEN_PUBLIC_KEY, 'JWT_ACCESS_TOKEN_PUBLIC_KEY');
   assertCookieSecureInProduction(validatedConfig);
+  assertNoWildcardOrigins(validatedConfig);
 
   return validatedConfig;
 }

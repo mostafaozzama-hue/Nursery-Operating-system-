@@ -83,6 +83,47 @@ describe('environment validation', () => {
     expect(result.COOKIE_SECURE).toBe(false);
   });
 
+  describe('CORS_ALLOWED_ORIGINS', () => {
+    it('parses a single origin into a one-element array', () => {
+      const result = validate(baseConfig({ CORS_ALLOWED_ORIGINS: 'http://localhost:3000' }));
+      expect(result.CORS_ALLOWED_ORIGINS).toEqual(['http://localhost:3000']);
+    });
+
+    it('parses a comma-separated list into a trimmed array', () => {
+      const result = validate(
+        baseConfig({ CORS_ALLOWED_ORIGINS: 'http://localhost:3000, http://localhost:5173 ' }),
+      );
+      expect(result.CORS_ALLOWED_ORIGINS).toEqual(['http://localhost:3000', 'http://localhost:5173']);
+    });
+
+    it('drops empty entries caused by a trailing comma', () => {
+      const result = validate(baseConfig({ CORS_ALLOWED_ORIGINS: 'http://localhost:3000,' }));
+      expect(result.CORS_ALLOWED_ORIGINS).toEqual(['http://localhost:3000']);
+    });
+
+    it('rejects an empty CORS_ALLOWED_ORIGINS value (nothing left after parsing)', () => {
+      expect(() => validate(baseConfig({ CORS_ALLOWED_ORIGINS: '' }))).toThrow();
+    });
+
+    it('rejects a wildcard origin', () => {
+      expect(() => validate(baseConfig({ CORS_ALLOWED_ORIGINS: '*' }))).toThrow(
+        /CORS_ALLOWED_ORIGINS must not contain a wildcard/,
+      );
+    });
+
+    it('rejects a wildcard mixed in with real origins', () => {
+      expect(() =>
+        validate(baseConfig({ CORS_ALLOWED_ORIGINS: 'http://localhost:3000,*' })),
+      ).toThrow(/CORS_ALLOWED_ORIGINS must not contain a wildcard/);
+    });
+
+    it('rejects a subdomain-glob pattern, not just a bare "*"', () => {
+      expect(() => validate(baseConfig({ CORS_ALLOWED_ORIGINS: '*.example.com' }))).toThrow(
+        /CORS_ALLOWED_ORIGINS must not contain a wildcard/,
+      );
+    });
+  });
+
   describe('COOKIE_SECURE fail-closed in production', () => {
     it('rejects NODE_ENV=production with COOKIE_SECURE omitted (defaults to false)', () => {
       expect(() => validate(baseConfig({ NODE_ENV: 'production' }))).toThrow(

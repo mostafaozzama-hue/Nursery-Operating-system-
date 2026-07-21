@@ -1,5 +1,16 @@
 import { Transform } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 
 export enum NodeEnv {
   Development = 'development',
@@ -43,6 +54,16 @@ export class EnvironmentVariables {
   @Transform(({ value }) => value === true || value === 'true')
   COOKIE_SECURE: boolean = false;
 
-  @IsString()
-  CORS_ALLOWED_ORIGINS!: string;
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value
+          .split(',')
+          .map((origin: string) => origin.trim())
+          .filter((origin: string) => origin.length > 0)
+      : value,
+  )
+  CORS_ALLOWED_ORIGINS!: string[];
 }
