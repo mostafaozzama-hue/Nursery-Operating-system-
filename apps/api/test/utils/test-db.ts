@@ -22,8 +22,8 @@ export async function getSystemRoleId(key: SystemRoleKey): Promise<string> {
   return role.id;
 }
 
-export async function createTestTenant(name: string) {
-  return superuserPrisma.tenant.create({ data: { name } });
+export async function createTestTenant(name: string, timezone?: string) {
+  return superuserPrisma.tenant.create({ data: { name, timezone } });
 }
 
 export async function createTestUser(email: string, password: string) {

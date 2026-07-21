@@ -50,9 +50,10 @@ export class IdentityRepository {
     email: string;
     passwordHash: string;
     roleId: string;
+    timezone?: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({ data: { name: data.tenantName } });
+      const tenant = await tx.tenant.create({ data: { name: data.tenantName, timezone: data.timezone } });
       const user = await tx.user.create({
         data: { email: data.email, passwordHash: data.passwordHash },
       });

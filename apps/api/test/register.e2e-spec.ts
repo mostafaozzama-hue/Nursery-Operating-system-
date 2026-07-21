@@ -114,4 +114,43 @@ describe('POST /auth/register (e2e)', () => {
     const res = await request(app.getHttpServer()).post('/auth/register').send(body);
     expect(res.status).toBe(400);
   });
+
+  it('accepts a valid IANA timezone and persists it on the tenant; defaults to UTC when omitted', async () => {
+    const email = `register-tz-${Date.now()}@e2e.test`;
+    const res = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        tenantName: 'E2E Timezone Tenant',
+        email,
+        password: 'CorrectHorseBattery1',
+        timezone: 'America/New_York',
+      });
+    expect(res.status).toBe(201);
+    createdUserIds.push(res.body.userId);
+    createdTenantIds.push(res.body.tenantId);
+
+    const tenant = await superuserPrisma.tenant.findUnique({ where: { id: res.body.tenantId } });
+    expect(tenant?.timezone).toBe('America/New_York');
+
+    const defaultEmail = `register-tz-default-${Date.now()}@e2e.test`;
+    const defaultRes = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ tenantName: 'E2E Default Timezone Tenant', email: defaultEmail, password: 'CorrectHorseBattery1' });
+    expect(defaultRes.status).toBe(201);
+    createdUserIds.push(defaultRes.body.userId);
+    createdTenantIds.push(defaultRes.body.tenantId);
+
+    const defaultTenant = await superuserPrisma.tenant.findUnique({ where: { id: defaultRes.body.tenantId } });
+    expect(defaultTenant?.timezone).toBe('UTC');
+  });
+
+  it('rejects an invalid timezone (400)', async () => {
+    const res = await request(app.getHttpServer()).post('/auth/register').send({
+      tenantName: 'E2E Invalid Timezone Tenant',
+      email: `register-tz-invalid-${Date.now()}@e2e.test`,
+      password: 'CorrectHorseBattery1',
+      timezone: 'Not/A_Real_Zone',
+    });
+    expect(res.status).toBe(400);
+  });
 });

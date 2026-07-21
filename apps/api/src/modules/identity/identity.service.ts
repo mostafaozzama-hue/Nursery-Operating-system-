@@ -30,6 +30,7 @@ export class AuthService {
         email: dto.email,
         passwordHash,
         roleId: ownerRole.id,
+        timezone: dto.timezone,
       });
     } catch (error) {
       if (isUniqueConstraintViolation(error)) {
