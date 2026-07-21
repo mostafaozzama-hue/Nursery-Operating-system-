@@ -1,25 +1,4 @@
 /**
- * Attendance's one-record-per-child-per-day invariant needs an unambiguous
- * "today," computed in the tenant's own timezone rather than the server's -
- * a tenant in America/New_York and one in Asia/Tokyo must not share the
- * server's UTC day boundary. Kept local to this module (not common/) since
- * Attendance is its only consumer so far.
- */
-export function getTenantLocalDate(timezone: string, at: Date = new Date()): Date {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = formatter.formatToParts(at);
-  const year = parts.find((p) => p.type === 'year')!.value;
-  const month = parts.find((p) => p.type === 'month')!.value;
-  const day = parts.find((p) => p.type === 'day')!.value;
-  return new Date(`${year}-${month}-${day}`);
-}
-
-/**
  * checkInTime/checkOutTime are @db.Time columns (wall-clock, no timezone of
  * their own) - the value stored should read as "what the clock on the wall
  * said," i.e. the tenant's local wall-clock time. Built with Date.UTC

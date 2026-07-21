@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
+import { getTenantLocalDate } from '../../../common/date/tenant-local-date';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { AttendanceConflictError } from './attendance-conflict.error';
-import { getTenantLocalDate, parseTimeOfDay, tenantLocalTimeAsDate } from './tenant-day.util';
+import { parseTimeOfDay, tenantLocalTimeAsDate } from './tenant-day.util';
 import { AttendanceSortField, AttendanceStatus } from './dto/attendance-query.dto';
 
 interface FindManyOptions {
