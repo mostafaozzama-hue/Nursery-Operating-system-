@@ -118,4 +118,36 @@ export class IdentityRepository {
       data: { revokedAt: new Date() },
     });
   }
+
+  /** Only the latest requested reset token should ever be valid - invalidate any still-unused ones before issuing a new one. */
+  async invalidateUnusedPasswordResetTokensForUser(userId: string): Promise<void> {
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+  }
+
+  createPasswordResetToken(data: { userId: string; tokenHash: string; expiresAt: Date }) {
+    return this.prisma.passwordResetToken.create({ data });
+  }
+
+  findPasswordResetTokenByHash(tokenHash: string) {
+    return this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+  }
+
+  /** Guarded: only succeeds if still unused - closes the concurrent-double-reset race the same way accept-invite's guarded update does. */
+  markPasswordResetTokenUsedIfUnused(id: string) {
+    return this.prisma.passwordResetToken.updateMany({
+      where: { id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+  }
+
+  /** tokenVersion bump invalidates every existing refresh token for this user - the same mechanism refresh() already checks. */
+  async updateUserPasswordAndBumpTokenVersion(userId: string, passwordHash: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    });
+  }
 }

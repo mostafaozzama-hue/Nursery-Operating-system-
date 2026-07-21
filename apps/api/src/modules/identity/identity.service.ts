@@ -4,10 +4,14 @@ import { randomBytes } from 'crypto';
 import { Response } from 'express';
 import { isUniqueConstraintViolation } from '../../common/errors/is-unique-constraint-violation';
 import { CurrentUserResponseDto } from './dto/current-user-response.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { IdentityRepository } from './identity.repository';
 import { AccessTokenClaims, TokenService } from './token.service';
+
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -177,6 +181,57 @@ export class AuthService {
     }
 
     this.clearAuthCookies(res);
+  }
+
+  /**
+   * Always the same response regardless of whether the email exists or
+   * has an active account - revealing the difference would let an
+   * attacker enumerate registered emails, the same class of issue fixed
+   * in login(). The raw token is never returned or logged anywhere -
+   * unlike an invite token, the caller here isn't a trusted, authenticated
+   * actor. Without email infrastructure, delivering it is out of scope;
+   * e2e tests read the stored hash directly via the test DB connection.
+   */
+  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+    const user = await this.repository.findUserByEmail(dto.email);
+    if (!user) {
+      return;
+    }
+
+    // Only the latest requested token should ever be valid.
+    await this.repository.invalidateUnusedPasswordResetTokensForUser(user.id);
+
+    const rawToken = randomBytes(32).toString('hex');
+    await this.repository.createPasswordResetToken({
+      userId: user.id,
+      tokenHash: this.tokenService.hashToken(rawToken),
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    });
+  }
+
+  /**
+   * Bumps tokenVersion on success - the same mechanism refresh() already
+   * checks - so every existing session is forced to re-authenticate, in
+   * case the old password was compromised and a session already exists.
+   */
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    const tokenHash = this.tokenService.hashToken(dto.token);
+    const existing = await this.repository.findPasswordResetTokenByHash(tokenHash);
+
+    if (!existing || existing.usedAt || existing.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired reset token');
+    }
+
+    // Guarded: only succeeds if still unused - closes the concurrent-
+    // double-reset race the same way accept-invite's guarded update does.
+    const { count } = await this.repository.markPasswordResetTokenUsedIfUnused(existing.id);
+    if (count === 0) {
+      throw new UnauthorizedException('Invalid or expired reset token');
+    }
+
+    const newPasswordHash = await argon2.hash(dto.newPassword);
+    await this.repository.updateUserPasswordAndBumpTokenVersion(existing.userId, newPasswordHash);
+    await this.repository.revokeAllActiveRefreshTokensForUser(existing.userId);
   }
 
   /** Shared by register/login: sign + store + cookie the tokens, return the profile. */

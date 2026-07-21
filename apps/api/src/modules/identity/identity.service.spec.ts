@@ -45,6 +45,11 @@ describe('AuthService', () => {
       rotateRefreshToken: jest.fn(),
       revokeAllActiveRefreshTokensForUser: jest.fn(),
       revokeRefreshTokenById: jest.fn(),
+      invalidateUnusedPasswordResetTokensForUser: jest.fn(),
+      createPasswordResetToken: jest.fn(),
+      findPasswordResetTokenByHash: jest.fn(),
+      markPasswordResetTokenUsedIfUnused: jest.fn(),
+      updateUserPasswordAndBumpTokenVersion: jest.fn(),
       findSystemRoleId: jest.fn(),
       registerTenantOwner: jest.fn(),
     } as unknown as jest.Mocked<IdentityRepository>;
@@ -357,6 +362,90 @@ describe('AuthService', () => {
       expect(repository.revokeRefreshTokenById).not.toHaveBeenCalled();
       expect(res.clearCookie).toHaveBeenCalledWith('access_token');
       expect(res.clearCookie).toHaveBeenCalledWith('refresh_token');
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('creates a reset token for an existing user, invalidating any prior unused ones first', async () => {
+      repository.findUserByEmail.mockResolvedValue(user as never);
+
+      await service.forgotPassword({ email: user.email });
+
+      expect(repository.invalidateUnusedPasswordResetTokensForUser).toHaveBeenCalledWith('user-1');
+      expect(repository.createPasswordResetToken).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1' }),
+      );
+    });
+
+    it('does nothing (but does not error) for an unknown email', async () => {
+      repository.findUserByEmail.mockResolvedValue(null);
+
+      await expect(service.forgotPassword({ email: 'nobody@x.com' })).resolves.toBeUndefined();
+
+      expect(repository.invalidateUnusedPasswordResetTokensForUser).not.toHaveBeenCalled();
+      expect(repository.createPasswordResetToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    const storedResetToken = {
+      id: 'reset-token-1',
+      userId: 'user-1',
+      tokenHash: 'hashed-refresh-token',
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      usedAt: null,
+    };
+
+    it('updates the password, bumps tokenVersion, and revokes all sessions', async () => {
+      repository.findPasswordResetTokenByHash.mockResolvedValue(storedResetToken as never);
+      repository.markPasswordResetTokenUsedIfUnused.mockResolvedValue({ count: 1 } as never);
+      (argon2.hash as jest.Mock).mockResolvedValue('new-hashed-password');
+
+      await service.resetPassword({ token: 'raw-token', newPassword: 'BrandNewPassword1' });
+
+      expect(repository.markPasswordResetTokenUsedIfUnused).toHaveBeenCalledWith('reset-token-1');
+      expect(repository.updateUserPasswordAndBumpTokenVersion).toHaveBeenCalledWith(
+        'user-1',
+        'new-hashed-password',
+      );
+      expect(repository.revokeAllActiveRefreshTokensForUser).toHaveBeenCalledWith('user-1');
+    });
+
+    it('rejects an unknown token', async () => {
+      repository.findPasswordResetTokenByHash.mockResolvedValue(null);
+      await expect(
+        service.resetPassword({ token: 'raw-token', newPassword: 'BrandNewPassword1' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects an already-used token', async () => {
+      repository.findPasswordResetTokenByHash.mockResolvedValue({
+        ...storedResetToken,
+        usedAt: new Date(),
+      } as never);
+      await expect(
+        service.resetPassword({ token: 'raw-token', newPassword: 'BrandNewPassword1' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects an expired token', async () => {
+      repository.findPasswordResetTokenByHash.mockResolvedValue({
+        ...storedResetToken,
+        expiresAt: new Date(Date.now() - 1000),
+      } as never);
+      await expect(
+        service.resetPassword({ token: 'raw-token', newPassword: 'BrandNewPassword1' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects when the guarded mark-used update loses a concurrent race', async () => {
+      repository.findPasswordResetTokenByHash.mockResolvedValue(storedResetToken as never);
+      repository.markPasswordResetTokenUsedIfUnused.mockResolvedValue({ count: 0 } as never);
+
+      await expect(
+        service.resetPassword({ token: 'raw-token', newPassword: 'BrandNewPassword1' }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(repository.updateUserPasswordAndBumpTokenVersion).not.toHaveBeenCalled();
     });
   });
 });

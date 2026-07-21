@@ -4,8 +4,10 @@ import { Request, Response } from 'express';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Roles } from './decorators/roles.decorator';
 import { CurrentUserResponseDto } from './dto/current-user-response.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { AuthService } from './identity.service';
@@ -83,6 +85,23 @@ export class IdentityController {
   @HttpCode(HttpStatus.NO_CONTENT)
   acceptInvite(@Body() dto: AcceptInviteDto): Promise<void> {
     return this.membershipService.acceptInvite(dto);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Request a password reset - always responds the same way regardless of whether the email exists' })
+  @ApiResponse({ status: 204 })
+  forgotPassword(@Body() dto: ForgotPasswordDto): Promise<void> {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Reset a password using a forgot-password token; invalidates all existing sessions' })
+  @ApiResponse({ status: 204 })
+  @ApiResponse({ status: 401, description: 'Invalid, expired, or already-used reset token' })
+  resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
+    return this.authService.resetPassword(dto);
   }
 
   @Get('me')
