@@ -82,4 +82,34 @@ describe('environment validation', () => {
     const result = validate(baseConfig());
     expect(result.COOKIE_SECURE).toBe(false);
   });
+
+  describe('COOKIE_SECURE fail-closed in production', () => {
+    it('rejects NODE_ENV=production with COOKIE_SECURE omitted (defaults to false)', () => {
+      expect(() => validate(baseConfig({ NODE_ENV: 'production' }))).toThrow(
+        /COOKIE_SECURE must be true when NODE_ENV=production/,
+      );
+    });
+
+    it("rejects NODE_ENV=production with COOKIE_SECURE explicitly 'false'", () => {
+      expect(() =>
+        validate(baseConfig({ NODE_ENV: 'production', COOKIE_SECURE: 'false' })),
+      ).toThrow(/COOKIE_SECURE must be true when NODE_ENV=production/);
+    });
+
+    it("accepts NODE_ENV=production with COOKIE_SECURE='true'", () => {
+      expect(() =>
+        validate(baseConfig({ NODE_ENV: 'production', COOKIE_SECURE: 'true' })),
+      ).not.toThrow();
+    });
+
+    it('accepts NODE_ENV=development with COOKIE_SECURE false (unaffected)', () => {
+      expect(() =>
+        validate(baseConfig({ NODE_ENV: 'development', COOKIE_SECURE: 'false' })),
+      ).not.toThrow();
+    });
+
+    it('accepts NODE_ENV=test with COOKIE_SECURE false (unaffected)', () => {
+      expect(() => validate(baseConfig({ NODE_ENV: 'test', COOKIE_SECURE: 'false' }))).not.toThrow();
+    });
+  });
 });
