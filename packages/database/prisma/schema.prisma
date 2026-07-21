@@ -14,6 +14,11 @@ model Tenant {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String
   status    String    @default("ACTIVE")
+  // IANA timezone (e.g. "America/New_York"), validated at input time via
+  // IsIanaTimezone. Used to compute an unambiguous local calendar day for
+  // day-scoped records (Attendance's one-record-per-child-per-day
+  // invariant). Defaults to UTC for tenants that don't set one.
+  timezone  String    @default("UTC")
   createdBy String?   @map("created_by") @db.Uuid
   updatedBy String?   @map("updated_by") @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at")
