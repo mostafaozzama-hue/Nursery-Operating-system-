@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@nursery-os/database';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { MembershipConflictError } from './membership-conflict.error';
+import { MembershipQueryStatus, MembershipSortField } from './dto/membership-query.dto';
+import { MembershipRoleKey } from './dto/invite-membership.dto';
 
 interface InviteData {
   email: string;
@@ -10,6 +13,20 @@ interface InviteData {
   placeholderPasswordHash: string;
   tokenHash: string;
   inviteExpiresAt: Date;
+}
+
+interface FindManyOptions {
+  page: number;
+  pageSize: number;
+  status?: MembershipQueryStatus;
+  roleKey?: MembershipRoleKey;
+  sortBy: MembershipSortField;
+  sortOrder: 'asc' | 'desc';
+}
+
+interface UpdateData {
+  status?: string;
+  roleKey?: MembershipRoleKey;
 }
 
 @Injectable()
@@ -110,6 +127,67 @@ export class MembershipRepository {
       await tx.user.update({ where: { id: membership.userId }, data: { passwordHash: newPasswordHash } });
 
       return { membershipId: membership.id, userId: membership.userId };
+    });
+  }
+
+  findMany(tenantId: string, options: FindManyOptions) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      const where: Prisma.TenantMembershipWhereInput = {
+        tenantId,
+        deletedAt: null,
+        ...(options.status ? { status: options.status } : {}),
+        ...(options.roleKey ? { role: { key: options.roleKey } } : {}),
+      };
+
+      const [items, total] = await Promise.all([
+        tx.tenantMembership.findMany({
+          where,
+          include: { role: true, user: true },
+          orderBy: { [options.sortBy]: options.sortOrder },
+          skip: (options.page - 1) * options.pageSize,
+          take: options.pageSize,
+        }),
+        tx.tenantMembership.count({ where }),
+      ]);
+
+      return { items, total };
+    });
+  }
+
+  findOneOrThrow(tenantId: string, id: string) {
+    return withTenantContext(this.prisma, tenantId, (tx) =>
+      findOrThrow('Membership', id, () =>
+        tx.tenantMembership.findFirst({
+          where: { id, tenantId, deletedAt: null },
+          include: { role: true, user: true },
+        }),
+      ),
+    );
+  }
+
+  update(tenantId: string, id: string, data: UpdateData, updatedBy: string) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      await findOrThrow('Membership', id, () =>
+        tx.tenantMembership.findFirst({ where: { id, tenantId, deletedAt: null } }),
+      );
+
+      const role = data.roleKey
+        ? await findOrThrow('Role', data.roleKey, () =>
+            tx.role.findFirst({ where: { key: data.roleKey, tenantId: null, deletedAt: null } }),
+          )
+        : undefined;
+
+      return tx.tenantMembership.update({
+        where: { id },
+        data: {
+          status: data.status,
+          roleId: role?.id,
+          activatedAt: data.status === 'ACTIVE' ? new Date() : undefined,
+          revokedAt: data.status === 'REVOKED' ? new Date() : undefined,
+          updatedBy,
+        },
+        include: { role: true, user: true },
+      });
     });
   }
 }

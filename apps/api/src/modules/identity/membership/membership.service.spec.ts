@@ -34,6 +34,9 @@ describe('MembershipService', () => {
     repository = {
       invite: jest.fn(),
       acceptInvite: jest.fn(),
+      findMany: jest.fn(),
+      findOneOrThrow: jest.fn(),
+      update: jest.fn(),
     } as unknown as jest.Mocked<MembershipRepository>;
 
     currentTenant = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as unknown as jest.Mocked<CurrentTenantProvider>;
@@ -110,6 +113,101 @@ describe('MembershipService', () => {
       await expect(
         service.acceptInvite({ tenantId: 'tenant-1', token: 'raw-token', password: 'CorrectHorseBattery1' }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('findAll', () => {
+    it('returns a paginated result built from the repository output', async () => {
+      repository.findMany.mockResolvedValue({
+        items: [{ ...membership, user }, { ...membership, id: 'membership-2', user }],
+        total: 2,
+      } as never);
+
+      const result = await service.findAll({
+        page: 1,
+        pageSize: 20,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      } as never);
+
+      expect(repository.findMany).toHaveBeenCalledWith('tenant-1', expect.objectContaining({ page: 1 }));
+      expect(result.data).toHaveLength(2);
+      expect(result.meta).toEqual({ total: 2, page: 1, pageSize: 20, totalPages: 1 });
+    });
+  });
+
+  describe('update', () => {
+    const staffTarget = { ...membership, id: 'target-1', role: { id: 'role-3', key: 'STAFF', name: 'Staff' }, user };
+    const ownerTarget = { ...membership, id: 'target-2', role: { id: 'role-1', key: 'OWNER', name: 'Owner' }, user };
+
+    it('forbids modifying your own membership', async () => {
+      await expect(
+        service.update('caller-membership', { status: 'SUSPENDED' }, {
+          role: 'OWNER',
+          membershipId: 'caller-membership',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repository.findOneOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('allows an OWNER caller to update a STAFF membership', async () => {
+      repository.findOneOrThrow.mockResolvedValue(staffTarget as never);
+      repository.update.mockResolvedValue(staffTarget as never);
+
+      const result = await service.update('target-1', { status: 'SUSPENDED' }, {
+        role: 'OWNER',
+        membershipId: 'caller-membership',
+      });
+
+      expect(repository.update).toHaveBeenCalledWith('tenant-1', 'target-1', { status: 'SUSPENDED' }, 'inviter-1');
+      expect(result.roleKey).toBe('STAFF');
+    });
+
+    it('forbids an ADMIN caller from modifying an OWNER membership', async () => {
+      repository.findOneOrThrow.mockResolvedValue(ownerTarget as never);
+
+      await expect(
+        service.update('target-2', { status: 'SUSPENDED' }, { role: 'ADMIN', membershipId: 'caller-membership' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('allows an OWNER caller to modify an OWNER membership', async () => {
+      repository.findOneOrThrow.mockResolvedValue(ownerTarget as never);
+      repository.update.mockResolvedValue(ownerTarget as never);
+
+      const result = await service.update('target-2', { status: 'SUSPENDED' }, {
+        role: 'OWNER',
+        membershipId: 'caller-membership',
+      });
+      expect(result.roleKey).toBe('OWNER');
+    });
+
+    it('forbids an ADMIN caller from granting the OWNER role', async () => {
+      repository.findOneOrThrow.mockResolvedValue(staffTarget as never);
+
+      await expect(
+        service.update('target-1', { roleKey: 'OWNER' }, { role: 'ADMIN', membershipId: 'caller-membership' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('allows an OWNER caller to grant the OWNER role', async () => {
+      repository.findOneOrThrow.mockResolvedValue(staffTarget as never);
+      repository.update.mockResolvedValue(ownerTarget as never);
+
+      const result = await service.update('target-1', { roleKey: 'OWNER' }, {
+        role: 'OWNER',
+        membershipId: 'caller-membership',
+      });
+      expect(result.roleKey).toBe('OWNER');
+    });
+
+    it('translates a not-found target into a 404', async () => {
+      repository.findOneOrThrow.mockRejectedValue(new EntityNotFoundError('Membership', 'target-1'));
+      await expect(
+        service.update('target-1', { status: 'SUSPENDED' }, { role: 'OWNER', membershipId: 'caller-membership' }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
