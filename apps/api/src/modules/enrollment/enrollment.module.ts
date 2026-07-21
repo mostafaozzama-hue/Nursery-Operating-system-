@@ -8,6 +8,7 @@ import { ClassroomModule } from './classroom/classroom.module';
 // Classroom/Child siblings, so only this import needs disambiguating.
 import { EnrollmentModule as EnrollmentRecordModule } from './enrollment/enrollment.module';
 import { GuardianModule } from './guardian/guardian.module';
+import { InvoiceModule } from './invoice/invoice.module';
 import { StaffModule } from './staff/staff.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { StaffModule } from './staff/staff.module';
     ChildGuardianModule,
     StaffModule,
     AttendanceModule,
+    InvoiceModule,
   ],
 })
 export class EnrollmentModule {}
