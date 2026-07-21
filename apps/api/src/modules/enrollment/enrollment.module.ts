@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AttendanceModule } from './attendance/attendance.module';
 import { ChildModule } from './child/child.module';
 import { ChildGuardianModule } from './child-guardian/child-guardian.module';
 import { ClassroomModule } from './classroom/classroom.module';
@@ -10,6 +11,14 @@ import { GuardianModule } from './guardian/guardian.module';
 import { StaffModule } from './staff/staff.module';
 
 @Module({
-  imports: [ClassroomModule, ChildModule, EnrollmentRecordModule, GuardianModule, ChildGuardianModule, StaffModule],
+  imports: [
+    ClassroomModule,
+    ChildModule,
+    EnrollmentRecordModule,
+    GuardianModule,
+    ChildGuardianModule,
+    StaffModule,
+    AttendanceModule,
+  ],
 })
 export class EnrollmentModule {}
