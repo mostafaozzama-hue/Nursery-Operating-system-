@@ -1,15 +1,24 @@
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { EnvironmentVariables } from '../../config/environment-variables';
 import { TokenService } from './token.service';
+
+const envValues: Record<string, string> = {
+  JWT_ACCESS_TOKEN_TTL: '15m',
+  JWT_REFRESH_TOKEN_TTL: '30d',
+};
 
 describe('TokenService', () => {
   let jwtService: { signAsync: jest.Mock };
+  let configService: jest.Mocked<ConfigService<EnvironmentVariables, true>>;
   let service: TokenService;
 
   beforeEach(() => {
     jwtService = { signAsync: jest.fn().mockResolvedValue('signed.jwt.token') };
-    service = new TokenService(jwtService as unknown as JwtService);
-    process.env.JWT_ACCESS_TOKEN_TTL = '15m';
-    process.env.JWT_REFRESH_TOKEN_TTL = '30d';
+    configService = {
+      get: jest.fn((key: string) => envValues[key]),
+    } as unknown as jest.Mocked<ConfigService<EnvironmentVariables, true>>;
+    service = new TokenService(jwtService as unknown as JwtService, configService);
   });
 
   describe('signAccessToken', () => {
@@ -79,12 +88,10 @@ describe('TokenService', () => {
 
   describe('TTL helpers', () => {
     it('accessTokenTtlMs reflects JWT_ACCESS_TOKEN_TTL', () => {
-      process.env.JWT_ACCESS_TOKEN_TTL = '15m';
       expect(service.accessTokenTtlMs()).toBe(15 * 60_000);
     });
 
     it('refreshTokenTtlMs reflects JWT_REFRESH_TOKEN_TTL', () => {
-      process.env.JWT_REFRESH_TOKEN_TTL = '30d';
       expect(service.refreshTokenTtlMs()).toBe(30 * 86_400_000);
     });
 

@@ -1,6 +1,8 @@
 import { Global, Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { EnvironmentVariables } from '../../config/environment-variables';
 import { AuthorizationService } from './authorization/authorization.service';
 import { CurrentUserProvider } from './current-user.provider';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -19,16 +21,19 @@ import { TokenService } from './token.service';
     PassportModule,
     MembershipModule,
     JwtModule.registerAsync({
-      useFactory: () => ({
-        privateKey: Buffer.from(process.env.JWT_ACCESS_TOKEN_PRIVATE_KEY ?? '', 'base64').toString(
-          'utf8',
-        ),
-        publicKey: Buffer.from(process.env.JWT_ACCESS_TOKEN_PUBLIC_KEY ?? '', 'base64').toString(
-          'utf8',
-        ),
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService<EnvironmentVariables, true>) => ({
+        privateKey: Buffer.from(
+          configService.get('JWT_ACCESS_TOKEN_PRIVATE_KEY', { infer: true }),
+          'base64',
+        ).toString('utf8'),
+        publicKey: Buffer.from(
+          configService.get('JWT_ACCESS_TOKEN_PUBLIC_KEY', { infer: true }),
+          'base64',
+        ).toString('utf8'),
         signOptions: {
           algorithm: 'RS256',
-          expiresIn: process.env.JWT_ACCESS_TOKEN_TTL ?? '15m',
+          expiresIn: configService.get('JWT_ACCESS_TOKEN_TTL', { infer: true }),
         },
       }),
     }),

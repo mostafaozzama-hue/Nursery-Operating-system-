@@ -1,7 +1,9 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@nursery-os/database';
 import * as argon2 from 'argon2';
 import { Response } from 'express';
+import { EnvironmentVariables } from '../../config/environment-variables';
 import { IdentityRepository } from './identity.repository';
 import { AuthService } from './identity.service';
 import { TokenService } from './token.service';
@@ -32,6 +34,7 @@ const user = {
 describe('AuthService', () => {
   let repository: jest.Mocked<IdentityRepository>;
   let tokenService: jest.Mocked<TokenService>;
+  let configService: jest.Mocked<ConfigService<EnvironmentVariables, true>>;
   let service: AuthService;
   let res: jest.Mocked<Response>;
 
@@ -65,9 +68,12 @@ describe('AuthService', () => {
       refreshTokenTtlMs: jest.fn().mockReturnValue(2_592_000_000),
     } as unknown as jest.Mocked<TokenService>;
 
-    service = new AuthService(repository, tokenService);
+    configService = {
+      get: jest.fn().mockReturnValue(false),
+    } as unknown as jest.Mocked<ConfigService<EnvironmentVariables, true>>;
+
+    service = new AuthService(repository, tokenService, configService);
     res = mockResponse();
-    process.env.COOKIE_SECURE = 'false';
     jest.clearAllMocks();
     (argon2.verify as jest.Mock).mockReset();
     (argon2.hash as jest.Mock).mockReset();

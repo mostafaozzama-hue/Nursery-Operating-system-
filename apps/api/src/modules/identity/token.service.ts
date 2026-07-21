@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID, createHash } from 'crypto';
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { EnvironmentVariables } from '../../config/environment-variables';
 import { parseDurationMs } from './parse-duration';
 
 export interface AccessTokenClaims {
@@ -14,14 +16,17 @@ export interface AccessTokenClaims {
 
 @Injectable()
 export class TokenService {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService<EnvironmentVariables, true>,
+  ) {}
 
   signAccessToken(claims: AccessTokenClaims): Promise<string> {
     return this.jwtService.signAsync(claims, { jwtid: randomUUID() });
   }
 
   accessTokenTtlMs(): number {
-    return parseDurationMs(process.env.JWT_ACCESS_TOKEN_TTL ?? '15m');
+    return parseDurationMs(this.configService.get('JWT_ACCESS_TOKEN_TTL', { infer: true }));
   }
 
   generateRefreshToken(): { token: string; hash: string } {
@@ -34,7 +39,7 @@ export class TokenService {
   }
 
   refreshTokenTtlMs(): number {
-    return parseDurationMs(process.env.JWT_REFRESH_TOKEN_TTL ?? '30d');
+    return parseDurationMs(this.configService.get('JWT_REFRESH_TOKEN_TTL', { infer: true }));
   }
 
   refreshTokenExpiresAt(): Date {

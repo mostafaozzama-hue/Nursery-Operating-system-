@@ -1,8 +1,10 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { Response } from 'express';
 import { isUniqueConstraintViolation } from '../../common/errors/is-unique-constraint-violation';
+import { EnvironmentVariables } from '../../config/environment-variables';
 import { CurrentUserResponseDto } from './dto/current-user-response.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -20,6 +22,7 @@ export class AuthService {
   constructor(
     private readonly repository: IdentityRepository,
     private readonly tokenService: TokenService,
+    private readonly configService: ConfigService<EnvironmentVariables, true>,
   ) {}
 
   /** Computed once per process and cached - a fixed, never-matchable hash used purely to equalize login's timing cost. */
@@ -251,7 +254,7 @@ export class AuthService {
   }
 
   private setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
-    const secure = process.env.COOKIE_SECURE === 'true';
+    const secure = this.configService.get('COOKIE_SECURE', { infer: true });
 
     res.cookie('access_token', accessToken, {
       httpOnly: true,
