@@ -8,6 +8,7 @@ import { RolesGuard } from './guards/roles.guard';
 import { IdentityController } from './identity.controller';
 import { IdentityRepository } from './identity.repository';
 import { AuthService } from './identity.service';
+import { MembershipModule } from './membership/membership.module';
 import { JwtUserProvider } from './providers/jwt-user.provider';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TokenService } from './token.service';
@@ -16,6 +17,7 @@ import { TokenService } from './token.service';
 @Module({
   imports: [
     PassportModule,
+    MembershipModule,
     JwtModule.registerAsync({
       useFactory: () => ({
         privateKey: Buffer.from(process.env.JWT_ACCESS_TOKEN_PRIVATE_KEY ?? '', 'base64').toString(
@@ -42,6 +44,6 @@ import { TokenService } from './token.service';
     RolesGuard,
     { provide: CurrentUserProvider, useClass: JwtUserProvider },
   ],
-  exports: [CurrentUserProvider, AuthorizationService, JwtAuthGuard, RolesGuard],
+  exports: [CurrentUserProvider, AuthorizationService, JwtAuthGuard, RolesGuard, TokenService],
 })
 export class IdentityModule {}
