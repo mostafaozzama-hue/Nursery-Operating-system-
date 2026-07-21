@@ -361,6 +361,9 @@ model Attendance {
   @@map("attendance")
 }
 
+// status is always one of DRAFT/ISSUED/PARTIALLY_PAID/PAID/VOID - OVERDUE is
+// never stored, it's derived at read time from (status, dueDate, tenant-
+// local "today"), to avoid a second, driftable source of truth.
 model Invoice {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId           String    @map("tenant_id") @db.Uuid
@@ -368,6 +371,7 @@ model Invoice {
   billedToGuardianId String    @map("billed_to_guardian_id") @db.Uuid
   status             String
   totalAmount        Decimal   @map("total_amount") @db.Decimal(12, 2)
+  dueDate            DateTime? @map("due_date") @db.Date
   createdBy          String?   @map("created_by") @db.Uuid
   updatedBy          String?   @map("updated_by") @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at")
@@ -381,6 +385,8 @@ model Invoice {
   lineItems        InvoiceLineItem[]
   payments         Payment[]
 
+  // CHECK invoices_total_amount_non_negative (total_amount >= 0) lives in
+  // migration add_billing_constraints - not expressible in Prisma DSL.
   @@index([tenantId])
   @@index([childId])
   @@index([billedToGuardianId])
@@ -405,6 +411,9 @@ model InvoiceLineItem {
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
+  // CHECK invoice_line_items_quantity_positive (quantity > 0) and
+  // invoice_line_items_amounts_non_negative (unit_amount >= 0 AND
+  // total_amount >= 0) live in migration add_billing_constraints.
   @@index([tenantId])
   @@index([invoiceId])
   @@map("invoice_line_items")
@@ -427,6 +436,8 @@ model Payment {
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
+  // CHECK payments_amount_positive (amount > 0) lives in migration
+  // add_billing_constraints.
   @@index([tenantId])
   @@index([invoiceId])
   @@map("payments")
