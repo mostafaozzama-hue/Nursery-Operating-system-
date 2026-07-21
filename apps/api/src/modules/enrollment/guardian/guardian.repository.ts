@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
+import { assertActiveMembership } from '../../../common/repository/assert-active-membership';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { containsInsensitive } from '../../../common/repository/query-filters.util';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { GuardianConflictError } from './guardian-conflict.error';
-import { GuardianValidationError } from './guardian-validation.error';
 import { GuardianSortField } from './dto/guardian-query.dto';
 
 interface FindManyOptions {
@@ -40,7 +40,8 @@ export class GuardianRepository {
   create(tenantId: string, data: CreateData, createdBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       if (data.userId) {
-        await this.assertLinkable(tx, tenantId, data.userId);
+        await assertActiveMembership(tx, tenantId, data.userId);
+        await this.assertNotLinkedToAnotherGuardian(tx, tenantId, data.userId);
       }
 
       return tx.guardian.create({
@@ -100,7 +101,8 @@ export class GuardianRepository {
       );
 
       if (data.userId) {
-        await this.assertLinkable(tx, tenantId, data.userId, id);
+        await assertActiveMembership(tx, tenantId, data.userId);
+        await this.assertNotLinkedToAnotherGuardian(tx, tenantId, data.userId, id);
       }
 
       return tx.guardian.update({
@@ -124,28 +126,18 @@ export class GuardianRepository {
   }
 
   /**
-   * userId must belong to a real user (404 if not) with an active
-   * TenantMembership in this same tenant (400 if not) - the documented,
-   * application-layer-only invariant from the domain model. Pre-checks the
-   * "already linked to another guardian" case for a deterministic message;
-   * the DB partial unique index remains the race-safety backstop, caught
-   * generically by the caller via isUniqueConstraintViolation.
+   * Pre-checks a deterministic "already linked" message; the DB partial
+   * unique index remains the race-safety backstop, caught generically by
+   * the caller via isUniqueConstraintViolation. excludeId omits the row
+   * being updated itself, so resubmitting a guardian's own unchanged
+   * userId on a PATCH doesn't false-positive as a conflict.
    */
-  private async assertLinkable(
+  private async assertNotLinkedToAnotherGuardian(
     tx: Prisma.TransactionClient,
     tenantId: string,
     userId: string,
     excludeId?: string,
   ): Promise<void> {
-    await findOrThrow('User', userId, () => tx.user.findFirst({ where: { id: userId, deletedAt: null } }));
-
-    const activeMembership = await tx.tenantMembership.findFirst({
-      where: { userId, tenantId, status: 'ACTIVE', deletedAt: null },
-    });
-    if (!activeMembership) {
-      throw new GuardianValidationError(`User ${userId} does not have an active membership in this tenant`);
-    }
-
     const existingLink = await tx.guardian.findFirst({
       where: { tenantId, userId, deletedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
     });

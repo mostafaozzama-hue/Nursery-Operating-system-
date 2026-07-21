@@ -1,10 +1,10 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
 import { EntityNotFoundError } from '../../../common/errors/entity-not-found.error';
+import { InactiveMembershipError } from '../../../common/errors/inactive-membership.error';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
 import { GuardianConflictError } from './guardian-conflict.error';
-import { GuardianValidationError } from './guardian-validation.error';
 import { GuardianRepository } from './guardian.repository';
 import { GuardianService } from './guardian.service';
 
@@ -59,8 +59,8 @@ describe('GuardianService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('translates a GuardianValidationError into a 400', async () => {
-      repository.create.mockRejectedValue(new GuardianValidationError('no active membership'));
+    it('translates an InactiveMembershipError into a 400', async () => {
+      repository.create.mockRejectedValue(new InactiveMembershipError('no active membership'));
       await expect(
         service.create({ firstName: 'Jordan', lastName: 'Rivera', phone: '555-0100' }),
       ).rejects.toThrow(BadRequestException);
@@ -130,8 +130,8 @@ describe('GuardianService', () => {
       await expect(service.update('guardian-1', {})).rejects.toThrow(NotFoundException);
     });
 
-    it('translates a GuardianValidationError into a 400', async () => {
-      repository.update.mockRejectedValue(new GuardianValidationError('no active membership'));
+    it('translates an InactiveMembershipError into a 400', async () => {
+      repository.update.mockRejectedValue(new InactiveMembershipError('no active membership'));
       await expect(service.update('guardian-1', { userId: 'user-x' })).rejects.toThrow(BadRequestException);
     });
   });

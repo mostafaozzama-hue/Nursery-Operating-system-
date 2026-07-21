@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { InactiveMembershipError } from '../../../common/errors/inactive-membership.error';
 import { isUniqueConstraintViolation } from '../../../common/errors/is-unique-constraint-violation';
 import { translateNotFound } from '../../../common/errors/translate-not-found';
 import { buildPaginatedResult } from '../../../common/pagination/pagination.util';
@@ -9,7 +10,6 @@ import { GuardianQueryDto } from './dto/guardian-query.dto';
 import { UpdateGuardianDto } from './dto/update-guardian.dto';
 import { GuardianConflictError } from './guardian-conflict.error';
 import { GuardianRepository } from './guardian.repository';
-import { GuardianValidationError } from './guardian-validation.error';
 
 @Injectable()
 export class GuardianService {
@@ -63,7 +63,7 @@ export class GuardianService {
   }
 
   private translateError(error: unknown): never {
-    if (error instanceof GuardianValidationError) {
+    if (error instanceof InactiveMembershipError) {
       throw new BadRequestException(error.message);
     }
     if (error instanceof GuardianConflictError) {
