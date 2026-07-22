@@ -66,4 +66,8 @@ export class EnvironmentVariables {
       : value,
   )
   CORS_ALLOWED_ORIGINS!: string[];
+
+  @IsOptional()
+  @IsIn(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
+  LOG_LEVEL: string = 'info';
 }
