@@ -5,4 +5,5 @@ export const auth = {
   register: (body: RegisterRequest) => post<CurrentUser>('/auth/register', body),
   login: (body: LoginRequest) => post<CurrentUser>('/auth/login', body),
   me: () => get<CurrentUser>('/auth/me'),
+  logout: () => post<void>('/auth/logout'),
 };
