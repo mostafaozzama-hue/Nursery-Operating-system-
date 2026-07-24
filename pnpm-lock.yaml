@@ -120,6 +120,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@nursery-os/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       next:
         specifier: ^15.0.0
         version: 15.5.20(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
