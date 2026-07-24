@@ -1,14 +1,7 @@
-'use client';
+import { PagePlaceholder } from '@/components/layout/page-placeholder';
 
-import { useAuth } from '@/lib/auth';
+export const metadata = { title: 'Overview · Nursery OS' };
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
-
-  return (
-    <div>
-      <p>Logged in as {user?.email}</p>
-      <button onClick={() => void logout()}>Log out</button>
-    </div>
-  );
+  return <PagePlaceholder title="Overview" />;
 }
