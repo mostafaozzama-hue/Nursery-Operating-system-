@@ -3,7 +3,7 @@
 import type { Classroom } from '@nursery-os/contracts';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ClassroomPicker } from '@/components/enrollments/classroom-picker';
+import { ClassroomPicker } from '@/components/classrooms/classroom-picker';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';

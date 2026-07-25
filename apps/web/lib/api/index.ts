@@ -4,5 +4,16 @@ import { children } from './endpoints/children';
 import { classrooms } from './endpoints/classrooms';
 import { enrollments } from './endpoints/enrollments';
 import { guardians } from './endpoints/guardians';
+import { memberships } from './endpoints/memberships';
+import { staff } from './endpoints/staff';
 
-export const api = { auth, classrooms, children, guardians, childGuardians, enrollments };
+export const api = {
+  auth,
+  classrooms,
+  children,
+  guardians,
+  childGuardians,
+  enrollments,
+  staff,
+  memberships,
+};

@@ -6,17 +6,27 @@ import { DataTable, type DataTableColumn } from '@/components/common/data-table'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { isApiError } from '@/lib/api/errors';
-import { useClassroomDirectory } from '@/lib/classrooms/queries';
+import { useClassroomDirectory, type ClassroomDirectoryResult } from '@/lib/classrooms/queries';
 
-/** Picks an existing classroom to enroll into or transfer to. Feature-specific, mirrors GuardianPicker/ChildPicker from Task 12.3. */
+/**
+ * Picks an existing classroom. Feature-specific, mirrors GuardianPicker/ChildPicker
+ * from Task 12.3. Used by both Enrollment and Staff.
+ *
+ * `directory`: optional pre-fetched result. Pass this when the caller already
+ * called useClassroomDirectory() itself for its own labels (e.g. StaffForm) -
+ * skips this component's own fetch instead of duplicating the request.
+ */
 export function ClassroomPicker({
   excludeIds = [],
   onSelect,
+  directory,
 }: {
   excludeIds?: string[];
   onSelect: (classroom: Classroom) => void;
+  directory?: ClassroomDirectoryResult;
 }) {
-  const { classrooms, isLoading, error, refetch } = useClassroomDirectory();
+  const ownDirectory = useClassroomDirectory(!directory);
+  const { classrooms, isLoading, error, refetch } = directory ?? ownDirectory;
   const [search, setSearch] = useState('');
 
   if (error) {

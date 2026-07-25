@@ -9,5 +9,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/children', label: 'Children' },
   { href: '/dashboard/guardians', label: 'Guardians' },
   { href: '/dashboard/classrooms', label: 'Classrooms' },
+  { href: '/dashboard/staff', label: 'Staff' },
   { href: '/dashboard/settings', label: 'Settings' },
 ];

@@ -1,19 +1,19 @@
 'use client';
 
-import type { Classroom, ClassroomSortField } from '@nursery-os/contracts';
+import type { Staff, StaffSortField } from '@nursery-os/contracts';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 
-export interface ClassroomsListQuery {
+export interface StaffListQuery {
   page: number;
   pageSize: number;
   search: string;
-  sortBy: ClassroomSortField;
+  sortBy: StaffSortField;
   sortOrder: 'asc' | 'desc';
 }
 
-const DEFAULTS: ClassroomsListQuery = {
+const DEFAULTS: StaffListQuery = {
   page: 1,
   pageSize: 20,
   search: '',
@@ -21,10 +21,10 @@ const DEFAULTS: ClassroomsListQuery = {
   sortOrder: 'desc',
 };
 
-const SORT_FIELDS: ClassroomSortField[] = ['name', 'capacity', 'createdAt'];
+const SORT_FIELDS: StaffSortField[] = ['hireDate', 'createdAt'];
 const SEARCH_DEBOUNCE_MS = 300;
 
-function readQuery(searchParams: URLSearchParams): ClassroomsListQuery {
+function readQuery(searchParams: URLSearchParams): StaffListQuery {
   const page = Number(searchParams.get('page'));
   const pageSize = Number(searchParams.get('pageSize'));
   const sortBy = searchParams.get('sortBy');
@@ -34,14 +34,14 @@ function readQuery(searchParams: URLSearchParams): ClassroomsListQuery {
     page: Number.isInteger(page) && page > 0 ? page : DEFAULTS.page,
     pageSize: Number.isInteger(pageSize) && pageSize > 0 ? pageSize : DEFAULTS.pageSize,
     search: searchParams.get('search') ?? DEFAULTS.search,
-    sortBy: SORT_FIELDS.includes(sortBy as ClassroomSortField)
-      ? (sortBy as ClassroomSortField)
+    sortBy: SORT_FIELDS.includes(sortBy as StaffSortField)
+      ? (sortBy as StaffSortField)
       : DEFAULTS.sortBy,
     sortOrder: sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : DEFAULTS.sortOrder,
   };
 }
 
-function toSearchString(query: ClassroomsListQuery): string {
+function toSearchString(query: StaffListQuery): string {
   const params = new URLSearchParams();
   if (query.page !== DEFAULTS.page) params.set('page', String(query.page));
   if (query.pageSize !== DEFAULTS.pageSize) params.set('pageSize', String(query.pageSize));
@@ -52,24 +52,24 @@ function toSearchString(query: ClassroomsListQuery): string {
   return qs ? `?${qs}` : '';
 }
 
-export interface ClassroomsListResult {
-  data: Classroom[];
+export interface StaffListResult {
+  data: Staff[];
   total: number;
   totalPages: number;
-  query: ClassroomsListQuery;
+  query: StaffListQuery;
   isLoading: boolean;
   error: unknown;
-  setQuery: (partial: Partial<ClassroomsListQuery>) => void;
+  setQuery: (partial: Partial<StaffListQuery>) => void;
   refetch: () => void;
 }
 
-/** Owns the list's URL-driven query (page/pageSize/search/sortBy/sortOrder) and its fetch. */
-export function useClassroomsList(): ClassroomsListResult {
+/** Owns the list's URL-driven query. `search` maps to the backend's `position` filter - Staff has no name of its own to search by. */
+export function useStaffList(): StaffListResult {
   const router = useRouter();
   const searchParams = useSearchParams();
   const query = useMemo(() => readQuery(searchParams), [searchParams]);
 
-  const [data, setData] = useState<Classroom[]>([]);
+  const [data, setData] = useState<Staff[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -82,11 +82,11 @@ export function useClassroomsList(): ClassroomsListResult {
     setIsLoading(true);
     setError(null);
 
-    api.classrooms
+    api.staff
       .list({
         page: query.page,
         pageSize: query.pageSize,
-        name: query.search || undefined,
+        position: query.search || undefined,
         sortBy: query.sortBy,
         sortOrder: query.sortOrder,
       })
@@ -108,12 +108,12 @@ export function useClassroomsList(): ClassroomsListResult {
     };
   }, [query.page, query.pageSize, query.search, query.sortBy, query.sortOrder, reloadToken]);
 
-  const applyQuery = (next: ClassroomsListQuery) => {
-    router.replace(`/dashboard/classrooms${toSearchString(next)}`);
+  const applyQuery = (next: StaffListQuery) => {
+    router.replace(`/dashboard/staff${toSearchString(next)}`);
   };
 
-  const setQuery = (partial: Partial<ClassroomsListQuery>) => {
-    const next: ClassroomsListQuery = {
+  const setQuery = (partial: Partial<StaffListQuery>) => {
+    const next: StaffListQuery = {
       ...query,
       ...partial,
       page: partial.page ?? (partial.search !== undefined ? DEFAULTS.page : query.page),
@@ -140,16 +140,55 @@ export function useClassroomsList(): ClassroomsListResult {
   };
 }
 
-export interface ClassroomResult {
-  data: Classroom | null;
+export interface ClassroomStaffResult {
+  data: Staff[];
+  isLoading: boolean;
+  error: unknown;
+  refetch: () => void;
+}
+
+/** Staff currently assigned to one classroom, embedded on the classroom's detail page. */
+export function useClassroomStaff(classroomId: string): ClassroomStaffResult {
+  const [data, setData] = useState<Staff[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    api.staff
+      .list({ classroomId, page: 1, pageSize: 100 })
+      .then((result) => {
+        if (!cancelled) setData(result.data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [classroomId, reloadToken]);
+
+  return { data, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
+}
+
+export interface StaffMemberResult {
+  data: Staff | null;
   isLoading: boolean;
   error: unknown;
   refetch: () => void;
 }
 
 /** Pass `null` to skip fetching (e.g. a create-mode form that conditionally has no id yet). */
-export function useClassroom(id: string | null): ClassroomResult {
-  const [data, setData] = useState<Classroom | null>(null);
+export function useStaffMember(id: string | null): StaffMemberResult {
+  const [data, setData] = useState<Staff | null>(null);
   const [isLoading, setIsLoading] = useState(id !== null);
   const [error, setError] = useState<unknown>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -166,10 +205,10 @@ export function useClassroom(id: string | null): ClassroomResult {
     setIsLoading(true);
     setError(null);
 
-    api.classrooms
+    api.staff
       .get(id)
-      .then((classroom) => {
-        if (!cancelled) setData(classroom);
+      .then((member) => {
+        if (!cancelled) setData(member);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err);
@@ -184,66 +223,4 @@ export function useClassroom(id: string | null): ClassroomResult {
   }, [id, reloadToken]);
 
   return { data, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
-}
-
-export interface ClassroomDirectoryResult {
-  classrooms: Classroom[];
-  byId: Map<string, Classroom>;
-  isLoading: boolean;
-  error: unknown;
-  refetch: () => void;
-}
-
-/**
- * Bulk lookup source for resolving classroom names in batches (enrollment
- * history rows, the classroom picker), instead of one request per row.
- * Backed by a single request for up to the API's max page size (100), sorted
- * by name - same documented scaling boundary as useGuardianDirectory /
- * useChildDirectory from Task 12.3.
- *
- * `enabled` (default true) lets a caller that already fetched this directory
- * itself pass it down to a child (e.g. StaffForm passing pre-fetched data
- * into ClassroomPicker) without triggering a second, redundant request.
- */
-export function useClassroomDirectory(enabled = true): ClassroomDirectoryResult {
-  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [isLoading, setIsLoading] = useState(enabled);
-  const [error, setError] = useState<unknown>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    if (!enabled) {
-      setClassrooms([]);
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-
-    api.classrooms
-      .list({ page: 1, pageSize: 100, sortBy: 'name', sortOrder: 'asc' })
-      .then((result) => {
-        if (!cancelled) setClassrooms(result.data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, reloadToken]);
-
-  const byId = useMemo(
-    () => new Map(classrooms.map((classroom) => [classroom.id, classroom])),
-    [classrooms],
-  );
-
-  return { classrooms, byId, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
 }

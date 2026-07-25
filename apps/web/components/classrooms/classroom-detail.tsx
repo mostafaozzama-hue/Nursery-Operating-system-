@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { ClassroomChildrenSection } from '@/components/enrollments/classroom-children-section';
+import { ClassroomStaffSection } from '@/components/staff/classroom-staff-section';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
@@ -76,6 +77,7 @@ export function ClassroomDetail({ classroomId }: { classroomId: string }) {
       />
 
       <ClassroomChildrenSection classroomId={classroomId} />
+      <ClassroomStaffSection classroomId={classroomId} />
     </div>
   );
 }
