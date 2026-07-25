@@ -1,7 +1,12 @@
-import { PagePlaceholder } from '@/components/layout/page-placeholder';
+import { Suspense } from 'react';
+import { ClassroomsList } from '@/components/classrooms/classrooms-list';
 
 export const metadata = { title: 'Classrooms · Nursery OS' };
 
 export default function ClassroomsPage() {
-  return <PagePlaceholder title="Classrooms" />;
+  return (
+    <Suspense fallback={<p>Loading…</p>}>
+      <ClassroomsList />
+    </Suspense>
+  );
 }
