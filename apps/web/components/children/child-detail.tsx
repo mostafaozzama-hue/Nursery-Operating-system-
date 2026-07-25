@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { LinkedGuardiansSection } from '@/components/child-guardians/linked-guardians-section';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
@@ -76,6 +77,8 @@ export function ChildDetail({ childId }: { childId: string }) {
         isPending={isDeleting}
         onConfirm={handleConfirmDelete}
       />
+
+      <LinkedGuardiansSection childId={childId} />
     </div>
   );
 }

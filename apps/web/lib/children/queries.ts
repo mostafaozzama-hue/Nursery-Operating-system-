@@ -185,3 +185,52 @@ export function useChild(id: string | null): ChildResult {
 
   return { data, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
 }
+
+export interface ChildDirectoryResult {
+  children: Child[];
+  byId: Map<string, Child>;
+  isLoading: boolean;
+  error: unknown;
+  refetch: () => void;
+}
+
+/**
+ * Bulk lookup source for resolving child names in batches (e.g. child-guardian
+ * link rows), instead of one request per row. Backed by a single request for up
+ * to the API's max page size (100), sorted by name - covers the first 100
+ * children per tenant. There's no `ids`-filter on `GET /children` to do a true
+ * targeted batch fetch, so this is a deliberate, documented scaling boundary
+ * rather than a full solution for very large tenants.
+ */
+export function useChildDirectory(): ChildDirectoryResult {
+  const [children, setChildren] = useState<Child[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    api.children
+      .list({ page: 1, pageSize: 100, sortBy: 'firstName', sortOrder: 'asc' })
+      .then((result) => {
+        if (!cancelled) setChildren(result.data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  const byId = useMemo(() => new Map(children.map((child) => [child.id, child])), [children]);
+
+  return { children, byId, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
+}
