@@ -24,6 +24,7 @@ erDiagram
 
     USERS ||--o| STAFF : "0..1 employment record"
     USERS ||--o| GUARDIANS : "0..1 person link"
+    STAFF ||--o{ STAFF_PAYROLL : "compensation record (optional, OWNER/ADMIN only)"
 
     CLASSROOMS ||--o{ ENROLLMENTS : "assigned (optional)"
     CLASSROOMS ||--o{ STAFF : "primary assignment (optional)"
@@ -92,6 +93,16 @@ erDiagram
         string position
         date hireDate
     }
+    STAFF_PAYROLL {
+        uuid id PK
+        uuid tenant_id FK
+        uuid staff_id FK
+        string payType
+        decimal payRate
+        string payFrequency
+        string currency
+        date effectiveDate
+    }
     CLASSROOMS {
         uuid id PK
         uuid tenant_id FK
@@ -159,6 +170,7 @@ erDiagram
 | `Guardian` | A tenant-scoped contact profile for a real-world person responsible for a child (parent, grandparent, authorized contact). Optionally linked to a `User` (`user_id`, nullable) for portal login — many guardians (emergency-only contacts) never need one. |
 | `ChildGuardian` | Join table expressing the many-to-many relationship between children and guardians. Carries relationship-specific facts (`relationshipType`, `isPrimaryContact`, `isEmergencyContact`, `canPickup`) on the *pairing*, not on `Guardian` — the same person could in principle relate differently to two different children. |
 | `Staff` | Employment record within a tenant. Owns `firstName`/`lastName` directly, as required fields — identity does not depend on an optional `User` link or `TenantMembership` lookup (see [ADR-0001 (product)](./adrs/0001-staff-owns-employee-profile.md)), matching how `Guardian` and `Child` already carry their own names. Also holds `position`, `hireDate`, and primary `classroom_id`. Optionally linked to a `User` for portal login, for the same reason as `Guardian` — not every staff member needs system access. |
+| `StaffPayroll` | A staff member's compensation record (`payType`, `payRate`, `payFrequency`, `currency`, `effectiveDate`), linked to `Staff` only by `staffId`. Deliberately mutable/overwritten-in-place, not historized like `Enrollment`. Fully separate module — own routes, contracts, and UI — gated `OWNER`/`ADMIN`-only for both read and write, since compensation is a stricter sensitivity class than the rest of `Staff`, which any authenticated tenant member can read (see [ADR-0002](./adrs/0002-payroll-independent-from-staff.md)). |
 | `Attendance` | Daily check-in/check-out record per child. Carries its own `classroom_id` snapshot, independent of `Enrollment`, since a child's attendance-day room can differ from their ongoing placement (e.g. temporary coverage). `checked_in_by`/`checked_out_by` are dedicated actor references, written once each and never overwritten by unrelated edits to the row — unlike the generic `created_by`/`updated_by` audit columns, which could otherwise be overwritten by an unrelated correction and lose their specific meaning. |
 | `Invoice` | A billing document for one child, billed to one guardian. Carries a status lifecycle (`DRAFT`/`ISSUED`/`PARTIALLY_PAID`/`PAID`/`OVERDUE`/`VOID`) and a stored `totalAmount`. |
 | `InvoiceLineItem` | Itemized charges within an invoice (tuition, late fee, meal plan, etc.). |
@@ -174,6 +186,7 @@ erDiagram
 | User → Guardian | 1 — 0..1 | Optional; a `User` may have no guardian profile at all |
 | Classroom → Enrollment | 1 — many | Nullable on `Enrollment` (pre-assignment/waitlist) |
 | Classroom → Staff | 1 — many | Nullable; primary/display assignment only, not scheduling |
+| Staff → StaffPayroll | 1 — many | In practice at most one *active* record per staff member (see Business Invariants); modeled as 1–many like `Enrollment` rather than 1–0..1, since soft-deleted prior records remain |
 | Child → Enrollment | 1 — many | Full placement history; at most one *open* (`endDate IS NULL`) at a time — see Business Invariants |
 | Child ↔ Guardian | many — many | Via `ChildGuardian` |
 | Child → Attendance | 1 — many | At most one per calendar day — see Business Invariants |
@@ -198,7 +211,7 @@ erDiagram
   )
   ```
   applied with a matching `WITH CHECK` clause.
-- This means **every** new table from this document — `classrooms`, `children`, `enrollments`, `guardians`, `child_guardians`, `staff`, `attendance`, `invoices`, `invoice_line_items`, `payments` — needs its own policy migration when implemented; there are no exceptions among them (unlike `roles`/`users` in Identity, which are cross-tenant by design and intentionally have no tenant-isolation policy).
+- This means **every** new table from this document — `classrooms`, `children`, `enrollments`, `guardians`, `child_guardians`, `staff`, `staff_payroll`, `attendance`, `invoices`, `invoice_line_items`, `payments` — needs its own policy migration when implemented; there are no exceptions among them (unlike `roles`/`users` in Identity, which are cross-tenant by design and intentionally have no tenant-isolation policy).
 - The database connection must continue to be the least-privilege `nursery_app` role (not the `nursery` superuser/owner) for any of this to have real effect — already established and verified in the Identity work.
 - Denormalizing `tenant_id` onto join tables (`ChildGuardian`, `InvoiceLineItem`) specifically avoids RLS policies that would otherwise need to join to a parent table to determine scope — slower and more fragile than a direct column check.
 
@@ -209,6 +222,7 @@ erDiagram
 - One attendance record per child per day: `UNIQUE(child_id, date)` on `Attendance`.
 - Unique child–guardian relationship: `UNIQUE(child_id, guardian_id)` on `ChildGuardian`, scoped to `deleted_at IS NULL` (so a removed relationship can be legitimately re-created later, same reuse pattern as elsewhere).
 - One active enrollment per child: `UNIQUE(child_id) WHERE endDate IS NULL AND deleted_at IS NULL` on `Enrollment` — at most one *open-ended* placement per child at any time.
+- One active payroll record per staff member: `UNIQUE(tenant_id, staff_id) WHERE deleted_at IS NULL` on `StaffPayroll` — same shape as the `Staff` uniqueness pattern, a raise/change overwrites in place rather than layering a new row alongside an old one.
 
 **Application-layer rules (not DB-enforced, by deliberate choice consistent with the Identity module's constraints-vs-business-rules split):**
 

@@ -35,6 +35,7 @@ model Tenant {
   guardians         Guardian[]
   childGuardians    ChildGuardian[]
   staff             Staff[]
+  staffPayroll      StaffPayroll[]
   attendanceRecords Attendance[]
   invoices          Invoice[]
   invoiceLineItems  InvoiceLineItem[]
@@ -316,9 +317,10 @@ model Staff {
   deletedAt   DateTime? @map("deleted_at")
   deletedBy   String?   @map("deleted_by") @db.Uuid
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  user      User?      @relation(fields: [userId], references: [id])
-  classroom Classroom? @relation(fields: [classroomId], references: [id])
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  user      User?          @relation(fields: [userId], references: [id])
+  classroom Classroom?     @relation(fields: [classroomId], references: [id])
+  payroll   StaffPayroll[]
 
   // Partial unique index staff_tenant_user_unique_active (tenant_id,
   // user_id, WHERE deleted_at IS NULL) lives in migration add_domain_model -
@@ -329,6 +331,37 @@ model Staff {
   @@index([userId])
   @@index([classroomId])
   @@map("staff")
+}
+
+// Deliberately simple and mutable, not historized - a payroll record is
+// overwritten in place on a raise/change, same tradeoff explicitly chosen
+// over an Enrollment-style effective-dated history. Fully separate module
+// from Staff Profile: linked only by staffId, no shared routes/contracts/UI.
+model StaffPayroll {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  staffId       String    @map("staff_id") @db.Uuid
+  payType       String    @map("pay_type")
+  payRate       Decimal   @map("pay_rate") @db.Decimal(12, 2)
+  payFrequency  String    @map("pay_frequency")
+  currency      String    @default("USD")
+  effectiveDate DateTime  @map("effective_date") @db.Date
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  deletedBy     String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  staff  Staff  @relation(fields: [staffId], references: [id])
+
+  // Partial unique index staff_payroll_tenant_staff_unique_active (tenant_id,
+  // staff_id, WHERE deleted_at IS NULL) - at most one active payroll record
+  // per staff member, per tenant. Same shape as staff_tenant_user_unique_active.
+  @@index([tenantId])
+  @@index([staffId])
+  @@map("staff_payroll")
 }
 
 // checkedInBy/checkedOutBy are dedicated, written-once actor references -
