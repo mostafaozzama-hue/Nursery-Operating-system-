@@ -9,6 +9,7 @@ import { ClassroomModule } from './classroom/classroom.module';
 import { EnrollmentModule as EnrollmentRecordModule } from './enrollment/enrollment.module';
 import { GuardianModule } from './guardian/guardian.module';
 import { InvoiceModule } from './invoice/invoice.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { StaffModule } from './staff/staff.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { StaffModule } from './staff/staff.module';
     GuardianModule,
     ChildGuardianModule,
     StaffModule,
+    PayrollModule,
     AttendanceModule,
     InvoiceModule,
   ],

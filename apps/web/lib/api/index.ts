@@ -5,6 +5,7 @@ import { classrooms } from './endpoints/classrooms';
 import { enrollments } from './endpoints/enrollments';
 import { guardians } from './endpoints/guardians';
 import { memberships } from './endpoints/memberships';
+import { payroll } from './endpoints/payroll';
 import { staff } from './endpoints/staff';
 
 export const api = {
@@ -16,4 +17,5 @@ export const api = {
   enrollments,
   staff,
   memberships,
+  payroll,
 };

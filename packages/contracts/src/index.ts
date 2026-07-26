@@ -8,3 +8,4 @@ export * from './child-guardians/types';
 export * from './enrollments/types';
 export * from './staff/types';
 export * from './memberships/types';
+export * from './payroll/types';
