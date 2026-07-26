@@ -188,15 +188,15 @@ Rule: flat bordered surfaces (current style) remain fine for tables and list con
 Each entry: current state (if it exists today) → target spec.
 
 ### 5.1 Buttons
-- **Today:** shadcn `Button` — variants `default`/`outline`/`ghost`/`destructive`, sizes `default`/`sm`. Functionally fine.
-- **Target:** keep the variant API; apply new color tokens (§4.1). Primary buttons = teal. Add a `success` variant (for confirm-style positive actions like "Check in") using `--success`. Minimum touch target 40px height on desktop, **44px on touch/tablet** (§6.2). Icon-only buttons always carry an `aria-label`.
+- **Today:** shadcn `Button` — variants `default`/`outline`/`ghost`/`destructive`/**`success`** (added for Attendance's Check In action), sizes `default`/`sm`/`xs`/`lg`/**`touch`** (44px, added for Attendance's tablet roster)/`icon`/`icon-sm`/`icon-xs`/`icon-lg`/**`icon-touch`**. The `success` variant and `touch`/`icon-touch` sizes exist but are only consumed by Attendance so far.
+- **Target:** apply new color tokens (§4.1) product-wide — primary buttons = teal (not yet done; `success`/`warning`/`info`/`destructive` semantic tokens exist in `globals.css`, but `--primary`/`--secondary`/module accents are still the original grayscale). Icon-only buttons always carry an `aria-label`.
 
 ### 5.2 Inputs
 - **Today:** shadcn `Input`, 32px height (`h-8`), functional but cramped for tablet use.
 - **Target:** default height 40px (36px allowed only in dense table-inline contexts). Border uses `--border`, focus ring uses `--ring` derived from `--primary` (currently generic gray ring — should tint teal). Always paired with a `Label` above (current pattern, keep) and inline error text below in `--destructive` at the "Small/meta" type size.
 
 ### 5.3 Selects
-- **Today:** raw native `<select>` styled by hand in a few forms (`link-guardian-form.tsx`), while other enum fields (Gender) are plain free-text inputs — **inconsistent field-type policy** (see §13, rule 3).
+- **Today:** a styled `Select` primitive (`components/ui/select.tsx`, Radix-based) now exists, built for Attendance's status/classroom filters — but every pre-existing enum field is unchanged: raw native `<select>` styled by hand in a few forms (`link-guardian-form.tsx`), while other enum fields (Gender) are plain free-text inputs — **inconsistent field-type policy** (see §13, rule 3).
 - **Target:** every enum/closed-vocabulary field (Gender, relationship type, pay type, pay frequency, classroom, staff, membership) uses the same searchable-select pattern. Two variants:
   - **Simple select** (< 8 options, e.g. Pay type, Gender): a styled dropdown, not raw `<select>`.
   - **Searchable picker** (open-ended or large lists, e.g. Classroom/Staff/Guardian/Membership pickers): keep the existing search-then-select pattern (§9 notes on consolidating the 5 current picker implementations into one shared component).
@@ -206,33 +206,33 @@ Each entry: current state (if it exists today) → target spec.
 - **Target:** a single shared `DatePicker` component wrapping the native input with consistent styling (rounded, bordered, calendar icon), reserving a true calendar-popover component only if/when a range-picker is needed (not required for current fields). Always locale-aware (§8): Gregorian display, but keep the door open for Hijri as a future toggle per tenant.
 
 ### 5.5 Cards
-- **Today:** no card component in use — detail pages are bare `<dl>` two-column field lists directly on the page background.
-- **Target:** a `Card` primitive (surface = `--background`, border `--border`, radius `--radius-lg`, padding `6`, optional `--shadow-sm`) becomes the standard container for every section on a detail page (see §10.1). Section header uses the "Section heading" type style with an optional module accent-colored left border (2px) matching §4.1.
+- **Today:** a `Card`/`CardHeader`/`CardTitle` primitive (`components/common/card.tsx`) exists — surface `--background`, border `--border`, radius `--radius-lg`, padding `6`, `shadow-sm` — and is used on Attendance Detail. Every other detail page (Child, Guardian, Classroom, Staff, Payroll) is still a bare `<dl>` two-column field list directly on the page background.
+- **Target:** roll `Card` out to every detail page (see §10.1). Section header uses the "Section heading" type style with an optional module accent-colored left border (2px) matching §4.1 — not yet added to the component.
 
 ### 5.6 Tables
-- **Today:** `components/common/data-table.tsx` is a pure static renderer — no sortable headers (despite backend support), no row selection, no bulk actions, no sticky header.
+- **Today:** `components/common/data-table.tsx` now supports clickable sortable headers (`sortKey`/`sortBy`/`sortOrder`/`onSortChange` props) and renders `Skeleton` placeholder rows while loading, both added for Attendance. Only `AttendanceList` actually passes `sortKey` on its columns — Children/Guardians/Classrooms/Staff/Payroll lists still render plain, unsorted headers despite the capability now existing in the shared component (see ux-debt.md UXD-4a). No row selection, no bulk actions, no sticky header yet anywhere.
 - **Target:**
-  - Clickable column headers that toggle `sortBy`/`sortOrder` (wire directly to existing backend query params — no backend change needed).
+  - Wire `sortKey` into the remaining pre-existing lists' columns (pure per-module wiring now, no `DataTable` change needed).
   - Optional row-selection checkboxes + a contextual bulk-action bar, added when a real bulk workflow exists (not speculatively).
   - Sticky header on scroll for long lists.
   - Zebra striping using `--muted` at low opacity, not a hard border grid.
   - Row hover state (`--muted`) to reinforce clickability where rows link to detail.
 
 ### 5.7 Badges
-- **Today:** status is currently shown as plain text (e.g. Membership status "ACTIVE"/"SUSPENDED" as a bare string; Enrollment status as bare text in a table cell).
-- **Target:** a `Badge` component, pill-shaped (`--radius-full`), colored by semantic meaning using §4.1 status tokens: `success` (ACTIVE, PAID, ENROLLED), `warning` (WAITLISTED, PENDING, INVITED), `destructive` (SUSPENDED, REVOKED, OVERDUE, WITHDRAWN), `muted` (neutral/default). One consistent mapping table lives in code next to wherever status enums are defined, not re-invented per module.
+- **Today:** a `Badge` component (`components/common/badge.tsx`) exists — pill-shaped, variants `success`/`warning`/`destructive`/`info`/`muted` using §4.1 status tokens — and is used for Attendance's `CHECKED_IN`/`CHECKED_OUT`/`ABSENT` status. Every other status field is still plain text (Membership status "ACTIVE"/"SUSPENDED" as a bare string; Enrollment status as bare text in a table cell).
+- **Target:** roll `Badge` out to Membership/Enrollment/Payroll status fields. One consistent mapping table per module, colocated with wherever that module's status enum is defined (Attendance's lives in `lib/attendance/mapper.ts`), not re-invented per module.
 
 ### 5.8 Empty states
-- **Today:** plain text strings ("No staff found.", "No classrooms available. Add one from the Classrooms page first.") — functionally fine, visually bare.
-- **Target:** a shared `EmptyState` component: icon (module-relevant, using module accent color at low opacity), one-line message, and — where relevant — a direct primary-action button (e.g. "Add Staff") instead of just a text hint pointing elsewhere.
+- **Today:** a shared `EmptyState` component (`components/common/empty-state.tsx`: icon + message + optional primary-action button) exists and is used by Attendance's roster and history list. Every other list still uses plain text strings ("No staff found.", "No classrooms available. Add one from the Classrooms page first.").
+- **Target:** roll `EmptyState` out to the remaining lists, adding a direct primary-action button (e.g. "Add Staff") where relevant instead of just a text hint pointing elsewhere.
 
 ### 5.9 Loading states
-- **Today:** literal `<p>Loading…</p>` text on every detail page and form; `DataTable` shows a "Loading…" row.
-- **Target:** replace with skeletons (§5.10) for anything that takes a perceptible fetch (lists, detail pages). Reserve plain spinners only for button-level pending states (e.g. "Saving…" — current pattern on submit buttons is good, keep it).
+- **Today:** `DataTable` uses `Skeleton` rows (via Attendance's usage) instead of a "Loading…" cell. Every detail page and form, including Attendance's own, still renders literal `<p>Loading…</p>` text — only the list/table loading state has been upgraded so far.
+- **Target:** replace remaining `<p>Loading…</p>` usages with skeletons (§5.10) for anything that takes a perceptible fetch (detail pages, forms). Reserve plain spinners only for button-level pending states (e.g. "Saving…" — current pattern on submit buttons is good, keep it).
 
 ### 5.10 Skeletons
-- **Today:** none exist.
-- **Target:** a `Skeleton` primitive (pulsing `--muted` block, `--radius-md`) with pre-built compositions: `SkeletonTable` (matches DataTable row/column shape), `SkeletonDetail` (matches the entity-header + card pattern from §10.1). Skeletons should mirror the actual shape of the content they replace, not a generic gray box, so layout doesn't jump on load.
+- **Today:** a `Skeleton` primitive (`components/common/skeleton.tsx`: pulsing `--muted` block, `--radius-md`, `motion-safe:` gated per §7) exists, consumed directly by `DataTable`'s loading rows and Attendance's roster loading state. No `SkeletonTable`/`SkeletonDetail` pre-built compositions exist yet — Attendance composes raw `Skeleton` blocks inline for its roster rather than a named composition, since no second consumer existed yet to validate the abstraction against (see product-principles.md on avoiding premature abstraction).
+- **Target:** if/when a second consumer needs the same shape, extract `SkeletonTable`/`SkeletonDetail` compositions. Skeletons should mirror the actual shape of the content they replace, not a generic gray box, so layout doesn't jump on load.
 
 ### 5.11 Toasts
 - **Today:** none exist — all feedback is inline (`fieldErrors`, `submitError` text under forms). This is fine for validation errors (keep inline) but there's no ephemeral success feedback anywhere (e.g. after a successful edit, the only signal is the page navigating).
@@ -243,8 +243,8 @@ Each entry: current state (if it exists today) → target spec.
 - **Target:** no structural change needed, just visual (§4). Continue requiring every irreversible action (Remove/Delete/Withdraw/Unlink) to route through this exact component — do not introduce a second confirmation pattern.
 
 ### 5.13 Drawers
-- **Today:** shadcn `Sheet` component is installed but not used anywhere yet.
-- **Target:** use drawers (slide-in from the end/trailing edge — right in LTR, left in RTL, per §8) for: quick-create flows launched from a list page (e.g. "Add Guardian" from within a Child's linked-guardians section, without leaving the child detail page), and for picker flows (Classroom/Staff/Guardian/Membership pickers) instead of the current inline-expanding-panel pattern — a drawer keeps the underlying page's context visible and is a better tablet interaction than an inline panel that pushes content down.
+- **Today:** shadcn `Sheet` is now in real use by Attendance: `side="right"` for the classroom picker (wrapping the existing `ClassroomPicker`, per the target below), and `side="bottom"` for the per-child check-in/check-out/mark-absent action sheet — the canonical tablet pattern named in §6.2, with its action buttons in `SheetFooter` (`mt-auto`) giving the sticky-bottom-action-bar behavior without a separate component. No other module uses `Sheet` yet — Staff/Payroll/etc. still use the inline-expanding-panel pattern for their pickers.
+- **Target:** roll drawers out to the remaining pickers (Classroom/Staff/Guardian/Membership) and quick-create flows launched from a list page (e.g. "Add Guardian" from within a Child's linked-guardians section, without leaving the child detail page) — a drawer keeps the underlying page's context visible and is a better tablet interaction than an inline panel that pushes content down. Slide-in side should follow the end/trailing edge — right in LTR, left in RTL, per §8 — once RTL exists; Attendance's `side="right"` picker is a fixed LTR value today, matching every other current LTR-only screen.
 
 ### 5.14 Sidebars
 - **Today:** flat link list (`components/layout/sidebar-nav.tsx`), no grouping, no collapse, always visible on desktop (`md:flex`), replaced by `MobileSidebar` (a sheet) below `md`.
@@ -391,7 +391,7 @@ The dashboard replaces `PagePlaceholder` and becomes the literal "control center
 3. **Attention list** (§5.16 alert list) — anything requiring action: classrooms over capacity, staff with no payroll record, staff with no portal access (from existing Staff/Payroll/Membership data).
 4. **Two-column lower section**: Recent activity (new Children/Guardians/Staff, from `createdAt`) alongside Birthdays this week/month (from `Child.dateOfBirth`).
 
-**Future-ready:** once Attendance ships, its "children present today" becomes the single most important stat card and moves to position #1; once Invoices ships, "overdue invoices" becomes a top-priority attention-list item. The dashboard's layout is designed to accept new stat cards and attention-list items without restructuring — it is a *composition* of independent widgets, not a bespoke one-off page.
+**Future-ready:** Attendance has shipped — its "children present today" should become the single most important stat card and move to position #1 whenever Dashboard v1 itself is built (Dashboard remains a `PagePlaceholder` today, per UXD-3; the data to power this stat card already exists via `GET /attendance`). Once Invoices ships, "overdue invoices" becomes a top-priority attention-list item. The dashboard's layout is designed to accept new stat cards and attention-list items without restructuring — it is a *composition* of independent widgets, not a bespoke one-off page.
 
 ---
 
@@ -440,6 +440,13 @@ Factual current state (verified against source) compared to the target spec abov
 - Correctly, deliberately isolated from Staff per explicit product decision — this is *not* a violation of rule 4, it's an intentional boundary. Rule 4's cross-module-context guidance applies to *display*, not *data coupling*: a quick-link chip from Staff Detail to "View Payroll" (§11) would satisfy discoverability without violating the isolation.
 - Pay type/frequency shown as bare text on detail/list ❌ (rule 5 — Badge candidate, though arguably lower priority than status enums since these aren't "state," just categorical facts — use judgement here, a Badge is optional for non-state categorical fields).
 
+### Attendance
+- First module built *after* this document existed, and the first to actually consume several of §5's target-spec components rather than the pre-existing plain-text/bare-`<dl>` patterns: `Badge` for status ✅ (rule 5), `Card` on the correction/detail page ✅ (§10.1, partial — no entity header yet), `EmptyState` ✅ (§5.8), `Skeleton` loading rows via `DataTable` ✅ (§5.9/§5.10), a new `Select` primitive for its status/classroom filters ✅ (§5.3, rule 2), and real `Sheet` usage for the first time in the product — `side="bottom"` for the tablet check-in/check-out/mark-absent action sheet (§6.2's canonical example) and `side="right"` for the classroom picker (§5.13).
+- Two distinct screens by design: a tablet-first daily roster (`ClassroomAttendanceRoster`, classroom-scoped, today only, 44px touch targets throughout) separate from a desktop-first audit/history list + detail + OWNER/ADMIN correction form (`AttendanceList`/`AttendanceDetail`/`AttendanceCorrectionForm`) — matching design-system §6's device-strategy split rather than forcing one `DataTable`-based screen to serve both a teacher's one-handed daily task and an admin's audit/correction workflow.
+- `AttendanceList` is the **first and only** list in the product with working sortable headers (rule 8) — `DataTable` itself now supports `sortKey`, but Children/Guardians/Classrooms/Staff/Payroll haven't been wired up to use it yet (tracked as UXD-4a, not a new gap introduced here).
+- No entity header/stat chips (§10.1 not applied) ❌, no module accent color assigned in §4.1's table (Attendance has none — reasonable, since unlike Children/Staff/Guardians it has no natural "owns a color" identity of its own; revisit if/when the Dashboard's "children present today" stat card, §12, wants one).
+- "Today" is computed from the browser's local date, not a tenant-timezone endpoint (none exists on the API yet) — an accepted, documented approximation correct for the on-site-tablet deployment model, not a spec violation, but worth knowing about before assuming it as a precedent for a remote-access scenario.
+
 ---
 
 ## 15. Current UX debt (consolidated)
@@ -456,7 +463,7 @@ Ranked by how directly each violates a rule in §13 vs. pure polish:
 | No entity header/stat chips anywhere | Medium — affects every detail page | §10.1 |
 | Status fields shown as bare text, not Badges | Medium — affects Enrollment, Staff/Membership | Rule 5 |
 | 5 independent picker implementations | Medium — maintenance risk, not user-visible yet | Rule 7 |
-| No sortable table headers despite backend support | Medium | §5.6 |
+| No sortable table headers on Children/Guardians/Classrooms/Staff/Payroll (capability now exists in `DataTable`, wired up only for Attendance) | Medium | §5.6, UXD-4a |
 | Zero color/visual identity (pure grayscale) | Medium — brand/perception, not functional | §4.1 |
 | No avatars/photos anywhere | Low-medium | §5.16/§10.1 |
 | No RTL/i18n foundation | Structural — compounds over time | §8 |
@@ -469,7 +476,7 @@ Ranked by how directly each violates a rule in §13 vs. pure polish:
 
 Ordered by impact-to-effort, assuming the design tokens (§4) and core components (§5) are implemented as a foundational pass first (item 1 below) — everything after depends on that foundation existing, per the "design once, don't reskin twice" principle already established in this document.
 
-1. **Foundational design-system implementation**: ship §4 tokens (palette, type scale, spacing, radius, shadow) into `globals.css`, and build the new shared primitives from §5 (`Card`, `Badge`, `EmptyState`, `Skeleton`, `Toast`, entity-header component, consolidated `EntityPicker`, sortable `DataTable`). Nothing else on this list should start before this lands, or it gets built twice.
+1. **Foundational design-system implementation** — **partially shipped**, as a byproduct of Attendance rather than as its own separate pass (the sequencing this item calls for — "nothing else should start before this lands" — was not followed strictly; it turned out fine here because Attendance needed exactly this subset of primitives, but is a real risk to watch on the *next* new-module task, since not every future module will happen to need the remaining pieces first). Done: `Card`, `Badge`, `EmptyState`, `Skeleton`, sortable `DataTable`, a new `Select` primitive, and the `--success`/`--warning`/`--info` status tokens in `globals.css`. Still outstanding: the full §4 palette/type-scale/spacing/radius/shadow rollout (only the status-token slice of §4 shipped), `Toast`, the entity-header component, and consolidated `EntityPicker`. Retrofitting the now-built primitives onto Children/Guardians/Classrooms/Staff/Payroll (items 4-6 below) still needs to happen — they don't get it for free just because the primitives now exist.
 2. **Fix the two correctness/hygiene defects**: Guardian Detail's raw `userId` leak, and breadcrumbs rendering raw UUIDs. Small effort, real defects, not just taste.
 3. **Dashboard v1** (§12) — highest visible impact, zero backend risk, directly closes the vision doc's named gap.
 4. **Entity Detail page pattern rollout** (§10.1) across Children/Guardians/Classrooms/Staff/Payroll/Enrollment — one component built once, applied everywhere.

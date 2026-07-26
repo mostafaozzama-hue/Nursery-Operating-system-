@@ -68,9 +68,9 @@ Compensation tracking. **Built and stable**, fully isolated from Staff by delibe
 
 ## Attendance
 
-Daily check-in/check-out. **Backend built** (Attendance module, tenant-local-date-aware, `checkedInBy`/`checkedOutBy` actor tracking, one record per child per day), **no frontend yet** — this is explicitly the next module on the current build sequence.
+Daily check-in/check-out. **Built** (backend + frontend) — Attendance module (tenant-local-date-aware, `checkedInBy`/`checkedOutBy` actor tracking, one record per child per day) plus a tablet-first classroom daily roster (check-in/check-out/mark-absent via a bottom-sheet drawer, per [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)) and an OWNER/ADMIN correction workflow (audit history list + detail + correction form).
 
-- **MVP:** Daily check-in/check-out per child ⚙️; mark-absent ⚙️; classroom-scoped daily attendance view (frontend) ⬜; correction workflow for OWNER/ADMIN (backend supports it) ⚙️.
+- **MVP:** Daily check-in/check-out per child ✅; mark-absent ✅; classroom-scoped daily attendance view (frontend) ✅; correction workflow for OWNER/ADMIN ✅.
 - **Professional:** Attendance reports (by child, by classroom, by date range) ⬜; late-pickup / early-drop-off flagging ⬜.
 - **Enterprise:** Multi-branch attendance rollup ⬜; compliance-oriented attendance exports (ratio reporting for licensing bodies) ⬜.
 - **Future:** QR-code check-in (named explicitly in the product's Egypt/GCC requirements) ⬜; session-based attendance — multiple check-in/out per day (explicitly deferred in the domain model as a purely additive future change) ⬜; biometric/photo-based check-in ⬜.
@@ -187,8 +187,8 @@ The parent-facing surface. Currently, parents have no dedicated experience at al
 
 The front-line staff experience — today, teachers use the same general admin web app as everyone else, with role-gated visibility (STAFF role can read most domain data, cannot manage Payroll/Memberships) but no dedicated, task-optimized surface.
 
-- **MVP:** Tablet-optimized attendance check-in flow (once Attendance frontend ships) ⬜.
-- **Professional:** Activity/meal/nap quick-logging optimized for one-handed tablet use ⬜; classroom roster quick-view ⬜.
+- **MVP:** Tablet-optimized attendance check-in flow ✅ — shipped as part of Attendance's classroom daily roster (44px touch targets, bottom-sheet actions), reachable via the general nav like any other module; not yet packaged as a dedicated, persona-locked Teacher App surface (see Professional below).
+- **Professional:** Activity/meal/nap quick-logging optimized for one-handed tablet use ⬜; classroom roster quick-view ⚙️ (Attendance's roster already *is* a classroom-scoped quick-view of today's check-in state, but reused as a general-nav screen, not built as this dedicated Teacher App surface).
 - **Enterprise:** Cross-classroom coverage view (for float/substitute teachers) ⬜.
 - **Future:** Dedicated native Teacher App (as opposed to a responsive web view) ⬜; **AI**-assisted note-to-parent-update drafting ⬜.
 

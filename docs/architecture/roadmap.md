@@ -11,12 +11,12 @@
 **Goal:** Every MVP-tier feature from [feature-map.md](./feature-map.md) actually works end-to-end, on a real visual design system, for a small nursery running its entire daily operation inside Nursery OS. This phase closes every gap between "backend exists" and "a user can actually do this."
 
 **Foundational (build once, unblock everything else):**
-- Design-system token and shared-component implementation ([design-system.md §4](./design-system.md#4-design-tokens)/[§5](./design-system.md#5-core-components)) — palette, typography, Card/Badge/EmptyState/Skeleton/Toast primitives, consolidated `EntityPicker`, sortable `DataTable`.
+- Design-system token and shared-component implementation ([design-system.md §4](./design-system.md#4-design-tokens)/[§5](./design-system.md#5-core-components)) — palette, typography, Card/Badge/EmptyState/Skeleton/Toast primitives, consolidated `EntityPicker`, sortable `DataTable`. **Partially shipped** alongside Attendance rather than as its own separate pass (see [design-system.md §16](./design-system.md#16-prioritized-ux-improvement-backlog) item 1): `Card`/`Badge`/`EmptyState`/`Skeleton`/sortable `DataTable`/a new `Select` primitive exist and are used by Attendance, but not yet retrofitted onto the modules below. Still outstanding: the full palette/typography rollout, `Toast`, entity-header component, `EntityPicker` consolidation.
 - Entity Detail / List / Form page-pattern rollout ([design-system.md §10](./design-system.md#10-reusable-page-patterns)) across all already-built modules.
 - Fix the two tracked correctness defects (raw `userId` leak on Guardian Detail, raw UUIDs in breadcrumbs — see [ux-debt.md](./ux-debt.md)).
 
 **Feature work (already-backend, needs frontend):**
-- **Attendance** frontend — check-in/check-out/absence, classroom-scoped daily view, correction workflow UI (backend fully built).
+- ~~**Attendance** frontend~~ — ✅ **shipped**: check-in/check-out/mark-absent via a tablet-first classroom daily roster, classroom-scoped daily view, OWNER/ADMIN correction workflow (audit history + detail + correction form).
 - **Billing** frontend — invoice creation/viewing (backend fully built).
 - **Payments** frontend — manual payment recording against invoices, cash/Vodafone Cash/InstaPay/bank-transfer as first-class methods on the entry form (backend fully built; integrations themselves are Phase 3).
 
@@ -25,7 +25,7 @@
 - **Settings** — tenant profile/timezone, membership/role management UI (backend exists via the Memberships module, no dedicated settings-page frontend yet).
 - Basic Admissions inquiry log (manual pipeline stages).
 
-**Already done, carried forward as-is:** Auth, Children, Guardians, Child-Guardian relationships, Classrooms, Enrollment, Staff, Payroll — all built and stable per [feature-map.md](./feature-map.md), no rework planned beyond the design-system visual pass above.
+**Already done, carried forward as-is:** Auth, Children, Guardians, Child-Guardian relationships, Classrooms, Enrollment, Staff, Payroll, **Attendance** — all built and stable per [feature-map.md](./feature-map.md), no rework planned beyond the design-system visual pass above.
 
 ---
 

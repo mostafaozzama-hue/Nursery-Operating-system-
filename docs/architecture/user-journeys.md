@@ -43,18 +43,18 @@ Each journey below is written as the *target* experience once the relevant [road
 - Manage staff performance, scheduling, and enrollment decisions day to day.
 
 **Daily workflow (target state):**
-1. Morning: checks who's present (Attendance, once built — currently backend-only) ⚙️ and which classrooms are short-staffed.
+1. Morning: checks who's present (Attendance) ✅, per classroom or via the history list's filters — a single cross-classroom "who's present right now" glance still doesn't exist until Dashboard v1's "children present today" stat card ships (§12) — and which classrooms are short-staffed.
 2. Reviews the admissions/waitlist pipeline ⬜ for decisions needed today (a family touring, a waitlist slot opening up).
 3. Handles escalations: an incident report ⬜, a billing dispute (once Billing/Payments frontend exists) ⬜, a guardian complaint.
 4. Manages Staff ✅ day-to-day: assigns classrooms, updates positions, links portal access for a new hire.
 5. Reviews Enrollment ✅ transfers/withdrawals as they come in from teachers/front-desk.
 
 **Pain points (today):**
-- No Attendance frontend — cannot see who's actually present without asking a teacher directly.
+- No single cross-classroom "who's present today" view — Attendance itself is built, but a Manager checking overall presence must go classroom-by-classroom or use the history list's filters rather than one glance (resolved once Dashboard v1 ships, §12).
 - No standalone Enrollment/waitlist list view (noted in [design-system.md §11](./design-system.md#11-navigation--information-architecture) and [feature-map.md](./feature-map.md#admissions)) — must open each child individually to check placement status.
 - Classroom Detail doesn't show occupancy or staff-count at a glance yet (flagged in [ux-debt.md](./ux-debt.md)).
 
-**Main screens:** Classroom Detail ✅ (with Children/Staff sections), Staff list/detail ✅, Enrollment actions embedded in Child Detail ✅, Attendance (once built) ⬜, a future Admissions pipeline view ⬜.
+**Main screens:** Classroom Detail ✅ (with Children/Staff sections), Staff list/detail ✅, Enrollment actions embedded in Child Detail ✅, Attendance (daily roster + history) ✅, a future Admissions pipeline view ⬜.
 
 **Navigation flow:** Login → Dashboard (attention list surfaces today's issues) ⬜ → Classroom Detail (check staffing/occupancy) → Staff Detail (reassign if short-staffed) → Child Detail (handle a specific enrollment/withdrawal action) → back to Dashboard.
 
@@ -71,19 +71,19 @@ Each journey below is written as the *target* experience once the relevant [road
 
 **Daily workflow (target state):**
 1. Opens the app on a shared classroom tablet, sees their classroom roster ✅ (via Staff's classroom assignment + Classroom's children section).
-2. Checks in each child as they arrive ⬜ (Attendance frontend, tablet-optimized, large touch targets per [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)).
-3. Logs quick activity/meal/nap entries through the day ⬜ (select-based, minimal typing per [product-principles.md](./product-principles.md) principle 3).
+2. Checks in each child as they arrive ✅ (Attendance's classroom daily roster, tablet-optimized, 44px touch targets, bottom-sheet action drawer per [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)).
+3. Logs quick activity/meal/nap entries through the day ⬜ (select-based, minimal typing per [product-principles.md](./product-principles.md) principle 3) — Activities/Meals modules still not started (see [feature-map.md](./feature-map.md#activities)).
 4. Checks pickup authorization before releasing a child (`ChildGuardian.canPickup`, already tracked in the backend) ✅ — currently visible only via the Child Detail's Guardians section, not yet surfaced in a teacher-optimized quick-check flow.
-5. Checks out each child at end of day ⬜.
+5. Checks out each child at end of day ✅ (same roster screen as check-in).
 
 **Pain points (today):**
-- Zero teacher-specific screens exist — a teacher today would use the exact same general admin interface as an Owner, with no task-optimized surface at all (see [feature-map.md](./feature-map.md#teacher-app)).
-- No Attendance frontend — this is the single most-used daily action for this persona and doesn't exist yet in the UI.
-- Current forms use raw native `<select>`/free-text inputs (§13 rule 2 in [design-system.md](./design-system.md#13-cross-module-consistency-rules)) rather than the large, tap-friendly selection controls this persona specifically needs.
+- No dedicated Teacher-mode entry point — Attendance's roster is fully built and tablet-optimized, but it's reachable only via the same general nav every role uses, not a persona-specific default landing screen that bypasses the Overview dashboard (see [feature-map.md](./feature-map.md#teacher-app) — the full Teacher App is Phase 3).
+- No activity/meal logging yet — attendance is solved, but this remains a second major daily-record-keeping gap for this persona.
+- Current forms use raw native `<select>`/free-text inputs (§13 rule 2 in [design-system.md](./design-system.md#13-cross-module-consistency-rules)) rather than the large, tap-friendly selection controls this persona specifically needs — Attendance itself avoids this (selection-first roster, no typing required for the common path), but other modules haven't been retrofitted.
 
-**Main screens (target):** A dedicated Teacher-mode classroom roster view ⬜, tablet-optimized Attendance check-in/out ⬜, quick activity logging ⬜, pickup-authorization quick-check ⬜.
+**Main screens (target):** A dedicated Teacher-mode classroom roster view ⬜ (Attendance's roster ✅ covers the *screen*, but not yet as a role-locked default landing), tablet-optimized Attendance check-in/out ✅, quick activity logging ⬜, pickup-authorization quick-check ⬜.
 
-**Navigation flow:** Login (ideally a lightweight, tablet-optimized login, not the current desktop-oriented one) → Classroom roster (default landing screen for this role, not the general Overview dashboard) → per-child quick actions (check-in, log activity, check-out) → done, minimal navigation depth.
+**Navigation flow:** Login (ideally a lightweight, tablet-optimized login, not the current desktop-oriented one) → Classroom roster (default landing screen for this role, not the general Overview dashboard — Attendance's roster exists but isn't wired as the default landing for STAFF yet) → per-child quick actions (check-in, log activity, check-out) → done, minimal navigation depth.
 
 ---
 
@@ -151,13 +151,13 @@ Each journey below is written as the *target* experience once the relevant [road
 1. Logs a new inquiry (name, contact, child age, interest) ⬜ — no Admissions module exists yet.
 2. Schedules a tour ⬜.
 3. Answers current-family questions by quickly looking up a Child ✅ or Guardian ✅ record.
-4. Covers Attendance check-in/out at the front entrance during peak drop-off/pickup times ⬜, verifying pickup authorization (`ChildGuardian.canPickup`, backend-tracked) ✅.
+4. Covers Attendance check-in/out at the front entrance during peak drop-off/pickup times ✅, verifying pickup authorization (`ChildGuardian.canPickup`, backend-tracked) ✅.
 
 **Pain points (today):**
 - No Admissions/inquiry-tracking capability exists — inquiries are presumably tracked outside the product entirely today.
-- Verifying "is this person authorized to pick up this child" today requires opening the Child Detail page and scrolling to the Guardians section — not the fast, glanceable check a front-desk moment under time pressure needs.
+- Verifying "is this person authorized to pick up this child" today requires opening the Child Detail page and scrolling to the Guardians section — not the fast, glanceable check a front-desk moment under time pressure needs. (Attendance's own check-out flow doesn't surface this either — a natural next integration point, not currently linked.)
 
-**Main screens (target):** Admissions inquiry log ⬜, Child/Guardian quick-lookup ✅ (existing list search), Attendance check-in/out ⬜, a fast pickup-authorization check screen ⬜.
+**Main screens (target):** Admissions inquiry log ⬜, Child/Guardian quick-lookup ✅ (existing list search), Attendance check-in/out ✅, a fast pickup-authorization check screen ⬜.
 
 **Navigation flow:** Login → Admissions inquiry log (default landing for this role during business hours) ⬜ → switches to Child/Guardian lookup for an existing-family question → switches to Attendance check-in/out during drop-off/pickup windows.
 
@@ -165,6 +165,6 @@ Each journey below is written as the *target* experience once the relevant [road
 
 ## Cross-journey observations
 
-- **Attendance is the single highest-leverage missing capability** across four of the six journeys above (Manager, Teacher, Parent, Receptionist all depend on it) — this corroborates its position as the next module in [roadmap.md](./roadmap.md).
+- **Attendance has shipped** (backend + frontend) and directly resolves the daily-workflow gap for three of the four journeys that depended on it — Manager, Teacher, Receptionist can all now check in/out/mark absent and see the results. **Parent remains blocked**, not by Attendance itself but by the entirely separate, still-unbuilt Parent portal ([feature-map.md](./feature-map.md#parent-app)) — the data now exists to eventually surface an "Attendance history" tab there (see the Parent journey above), but nothing about Attendance shipping unblocks a Parent until that portal itself is built.
 - **No persona currently has a task-optimized entry point** — every role lands on the same general admin app today. The Dashboard (Owner/Manager), a Teacher-mode roster view, and a genuinely separate Parent portal are all distinct surfaces this product needs, not variations of one generic screen.
 - **Billing/Payments frontend absence blocks two full personas** (Accountant, Parent) from having any real workflow in the product at all today, despite complete backend support — this is a strong signal for roadmap sequencing (see [roadmap.md](./roadmap.md)).
