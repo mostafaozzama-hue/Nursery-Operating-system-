@@ -1,0 +1,170 @@
+# Nursery OS — User Journeys
+
+**Status:** Living document — Part of the Nursery OS Product Bible. These journeys describe the *intended* end-to-end experience for each persona, using the current architecture and feature map as ground truth for what exists today versus what's planned. Cross-references: [feature-map.md](./feature-map.md) for feature tiering, [design-system.md](./design-system.md) for the concrete page patterns each journey moves through, [vision.md](./vision.md) for the personas' place in the buyer/user model.
+
+Each journey below is written as the *target* experience once the relevant [roadmap.md](./roadmap.md) phase ships — where the current product already supports a step, it's marked ✅; where it's planned but not yet built, it's marked ⬜, so this document stays honest as the product matures rather than describing an aspirational fiction.
+
+---
+
+## Owner
+
+**Who they are:** The economic buyer, especially at the small/medium nursery tier (see [vision.md](./vision.md)). Often also the hands-on operator at the small end, or a step removed from daily operations at the medium/enterprise end, checking in on the business rather than running it minute-to-minute.
+
+**Goals:**
+- Know the health of the business at a glance: occupancy, revenue, staffing, without asking anyone.
+- Make confident decisions about capacity, hiring, and pricing.
+- Trust that the numbers (enrollment, revenue, payroll cost) are accurate without personally reconciling them.
+
+**Daily workflow (target state):**
+1. Opens the dashboard first thing ⬜ (currently a placeholder — see [feature-map.md](./feature-map.md#analytics)) — sees occupancy, revenue-at-a-glance, anything flagged as needing attention.
+2. Reviews the attention list: near-capacity classrooms, overdue invoices, staff without a payroll record ⬜.
+3. Spot-checks Staff ✅ and Payroll ✅ for headcount and cost sanity.
+4. Approves or reviews anything requiring OWNER-level sign-off (role/membership changes, payroll changes — both OWNER/ADMIN-gated today) ✅.
+5. Occasionally drills into Children ✅ / Guardians ✅ / Classrooms ✅ / Enrollment ✅ to answer a specific question (e.g. "why is this classroom over capacity").
+
+**Pain points (today):**
+- No dashboard exists — every "how's the business doing" question requires opening multiple modules and mentally aggregating.
+- No Billing/Payments frontend yet — cannot see revenue or overdue invoices at all today, despite the backend already tracking invoice status lifecycle.
+- No cross-branch visibility (single-tenant assumption) — irrelevant for a single-site owner today, but a real gap once Multi-Branch matters.
+
+**Main screens:** Dashboard (once built) ⬜, Staff list/detail ✅, Payroll list/detail ✅, Classrooms list/detail ✅ (occupancy visible once the stat-chip work in [design-system.md §10.1](./design-system.md#101-entity-detail-page-pattern-target-spec) ships), Settings (once built) ⬜.
+
+**Navigation flow:** Login → Dashboard (control center) → drill into a flagged item (e.g. a near-capacity classroom) → Classroom Detail → (if a staffing question) Staff Detail → (if a compensation question) the linked Payroll record via the quick-link chip described in [design-system.md §11](./design-system.md#11-navigation--information-architecture).
+
+---
+
+## Manager / Director
+
+**Who they are:** The daily operational owner at medium/enterprise nurseries — hired or delegated to run day-to-day operations so the Owner doesn't have to. The heaviest user of cross-module data, and the persona most affected by the current lack of a real dashboard.
+
+**Goals:**
+- Keep every classroom staffed, within capacity, and running smoothly today.
+- Resolve parent issues before they escalate.
+- Manage staff performance, scheduling, and enrollment decisions day to day.
+
+**Daily workflow (target state):**
+1. Morning: checks who's present (Attendance, once built — currently backend-only) ⚙️ and which classrooms are short-staffed.
+2. Reviews the admissions/waitlist pipeline ⬜ for decisions needed today (a family touring, a waitlist slot opening up).
+3. Handles escalations: an incident report ⬜, a billing dispute (once Billing/Payments frontend exists) ⬜, a guardian complaint.
+4. Manages Staff ✅ day-to-day: assigns classrooms, updates positions, links portal access for a new hire.
+5. Reviews Enrollment ✅ transfers/withdrawals as they come in from teachers/front-desk.
+
+**Pain points (today):**
+- No Attendance frontend — cannot see who's actually present without asking a teacher directly.
+- No standalone Enrollment/waitlist list view (noted in [design-system.md §11](./design-system.md#11-navigation--information-architecture) and [feature-map.md](./feature-map.md#admissions)) — must open each child individually to check placement status.
+- Classroom Detail doesn't show occupancy or staff-count at a glance yet (flagged in [ux-debt.md](./ux-debt.md)).
+
+**Main screens:** Classroom Detail ✅ (with Children/Staff sections), Staff list/detail ✅, Enrollment actions embedded in Child Detail ✅, Attendance (once built) ⬜, a future Admissions pipeline view ⬜.
+
+**Navigation flow:** Login → Dashboard (attention list surfaces today's issues) ⬜ → Classroom Detail (check staffing/occupancy) → Staff Detail (reassign if short-staffed) → Child Detail (handle a specific enrollment/withdrawal action) → back to Dashboard.
+
+---
+
+## Teacher
+
+**Who they are:** The highest-frequency daily user of any part of the system, and the persona with the least patience for friction — standing in a classroom, often holding a child, using a shared tablet. See [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk) and [product-principles.md](./product-principles.md) principles 3, 21, 22 for the standing design commitments this journey depends on.
+
+**Goals:**
+- Complete required daily record-keeping (attendance, activities) with minimal typing, minimal taps, minimal time away from the children.
+- Know which children are assigned to their classroom today and any special instructions (allergies, pickup authorization).
+- Communicate a quick update to a parent without leaving the classroom.
+
+**Daily workflow (target state):**
+1. Opens the app on a shared classroom tablet, sees their classroom roster ✅ (via Staff's classroom assignment + Classroom's children section).
+2. Checks in each child as they arrive ⬜ (Attendance frontend, tablet-optimized, large touch targets per [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)).
+3. Logs quick activity/meal/nap entries through the day ⬜ (select-based, minimal typing per [product-principles.md](./product-principles.md) principle 3).
+4. Checks pickup authorization before releasing a child (`ChildGuardian.canPickup`, already tracked in the backend) ✅ — currently visible only via the Child Detail's Guardians section, not yet surfaced in a teacher-optimized quick-check flow.
+5. Checks out each child at end of day ⬜.
+
+**Pain points (today):**
+- Zero teacher-specific screens exist — a teacher today would use the exact same general admin interface as an Owner, with no task-optimized surface at all (see [feature-map.md](./feature-map.md#teacher-app)).
+- No Attendance frontend — this is the single most-used daily action for this persona and doesn't exist yet in the UI.
+- Current forms use raw native `<select>`/free-text inputs (§13 rule 2 in [design-system.md](./design-system.md#13-cross-module-consistency-rules)) rather than the large, tap-friendly selection controls this persona specifically needs.
+
+**Main screens (target):** A dedicated Teacher-mode classroom roster view ⬜, tablet-optimized Attendance check-in/out ⬜, quick activity logging ⬜, pickup-authorization quick-check ⬜.
+
+**Navigation flow:** Login (ideally a lightweight, tablet-optimized login, not the current desktop-oriented one) → Classroom roster (default landing screen for this role, not the general Overview dashboard) → per-child quick actions (check-in, log activity, check-out) → done, minimal navigation depth.
+
+---
+
+## Accountant / Bookkeeper
+
+**Who they are:** Responsible for billing, payments, and payroll accuracy — may be a dedicated hire at medium/enterprise nurseries, or the Owner wearing this hat at the small end. See [feature-map.md](./feature-map.md#billing) and [feature-map.md](./feature-map.md#payroll).
+
+**Goals:**
+- Get every family billed correctly and on time.
+- Reconcile payments (cash, Vodafone Cash, InstaPay, bank transfer) against invoices without manual spreadsheet work.
+- Run payroll accurately and on schedule.
+
+**Daily/weekly workflow (target state):**
+1. Reviews outstanding invoices and overdue accounts ⬜ (Billing frontend not yet built; backend model exists).
+2. Records payments as they come in, across whichever method the parent actually used ⬜ — cash, mobile wallet, bank transfer, all first-class per [vision.md](./vision.md).
+3. Reviews/updates Payroll records ✅ for new hires, raises, or rate changes.
+4. Runs period-end reports (revenue, outstanding balances, payroll cost) ⬜ — no reporting frontend exists yet (see [feature-map.md](./feature-map.md#reports)).
+
+**Pain points (today):**
+- No Billing or Payments frontend at all — this persona's core daily job cannot currently be done inside Nursery OS, despite the backend data model already existing.
+- No local payment-method integrations (Vodafone Cash, InstaPay) — even once a frontend exists, payment recording will initially be manual entry, not reconciled automatically.
+- Payroll is a single mutable record (no history) by deliberate current design — an accountant needing "what did we pay this person last quarter" cannot get that from the system yet (flagged in [feature-map.md](./feature-map.md#payroll) as a revisit candidate).
+
+**Main screens (target):** Invoice list/detail ⬜, Payment recording flow ⬜, Payroll list/detail ✅, a future Reports module ⬜.
+
+**Navigation flow:** Login → Billing/Payments module (once built, likely under a future **Finance** sidebar group per [design-system.md §11](./design-system.md#11-navigation--information-architecture)) → Guardian Detail (to check billing history/contact before following up) → back to Billing to record a payment → Payroll for staff compensation tasks.
+
+---
+
+## Parent
+
+**Who they are:** The end customer's customer — not the buyer, but the person whose trust drives the paying customer's (Owner's) retention. Currently has **no dedicated experience at all** in Nursery OS (see [feature-map.md](./feature-map.md#parent-app)).
+
+**Goals:**
+- Know their child is safe, cared for, and learning.
+- Understand what they owe and pay it easily, in a method they actually use.
+- Communicate with the nursery/teacher without friction.
+
+**Daily/weekly workflow (target state):**
+1. Receives a WhatsApp update about their child's day ⬜ (per [vision.md](./vision.md)'s WhatsApp-first communication strategy).
+2. Logs into a parent portal ⬜ to view their child's profile, attendance, and any activity updates.
+3. Views and pays an outstanding invoice ⬜, using cash/Vodafone Cash/InstaPay/bank transfer.
+4. Messages a teacher or the front desk with a question ⬜.
+
+**Pain points (today):**
+- No parent-facing surface exists whatsoever — everything described above is currently handled informally outside the product (WhatsApp groups, verbal updates, manual payment collection), which is precisely the fragmentation problem named in [vision.md](./vision.md).
+- The backend already supports an optional Guardian→User portal link, but there is no actual login screen, no portal UI, and no data surfaced to a parent anywhere yet.
+
+**Main screens (target):** Parent portal login ⬜, Child summary view ⬜, Invoice/payment view ⬜, Messaging ⬜.
+
+**Navigation flow (target):** Parent-specific login (separate from the staff admin app, likely a distinct route/subdomain) → Child summary (single or multi-child switcher) → drill into Attendance history / Activity feed / Billing, each as its own simple tab, not a general-purpose admin UI repurposed for parents.
+
+---
+
+## Receptionist / Front Desk
+
+**Who they are:** The first point of contact for prospective and current families — handles inquiries, tours, and day-to-day check-in coverage at nurseries large enough to have a dedicated front-desk role. See [feature-map.md](./feature-map.md#admissions).
+
+**Goals:**
+- Capture every inquiry so nothing falls through the cracks.
+- Give prospective families a good first impression quickly.
+- Support daily check-in/check-out and handle walk-in questions.
+
+**Daily workflow (target state):**
+1. Logs a new inquiry (name, contact, child age, interest) ⬜ — no Admissions module exists yet.
+2. Schedules a tour ⬜.
+3. Answers current-family questions by quickly looking up a Child ✅ or Guardian ✅ record.
+4. Covers Attendance check-in/out at the front entrance during peak drop-off/pickup times ⬜, verifying pickup authorization (`ChildGuardian.canPickup`, backend-tracked) ✅.
+
+**Pain points (today):**
+- No Admissions/inquiry-tracking capability exists — inquiries are presumably tracked outside the product entirely today.
+- Verifying "is this person authorized to pick up this child" today requires opening the Child Detail page and scrolling to the Guardians section — not the fast, glanceable check a front-desk moment under time pressure needs.
+
+**Main screens (target):** Admissions inquiry log ⬜, Child/Guardian quick-lookup ✅ (existing list search), Attendance check-in/out ⬜, a fast pickup-authorization check screen ⬜.
+
+**Navigation flow:** Login → Admissions inquiry log (default landing for this role during business hours) ⬜ → switches to Child/Guardian lookup for an existing-family question → switches to Attendance check-in/out during drop-off/pickup windows.
+
+---
+
+## Cross-journey observations
+
+- **Attendance is the single highest-leverage missing capability** across four of the six journeys above (Manager, Teacher, Parent, Receptionist all depend on it) — this corroborates its position as the next module in [roadmap.md](./roadmap.md).
+- **No persona currently has a task-optimized entry point** — every role lands on the same general admin app today. The Dashboard (Owner/Manager), a Teacher-mode roster view, and a genuinely separate Parent portal are all distinct surfaces this product needs, not variations of one generic screen.
+- **Billing/Payments frontend absence blocks two full personas** (Accountant, Parent) from having any real workflow in the product at all today, despite complete backend support — this is a strong signal for roadmap sequencing (see [roadmap.md](./roadmap.md)).
