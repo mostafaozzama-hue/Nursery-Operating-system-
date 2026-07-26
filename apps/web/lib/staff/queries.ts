@@ -21,7 +21,7 @@ const DEFAULTS: StaffListQuery = {
   sortOrder: 'desc',
 };
 
-const SORT_FIELDS: StaffSortField[] = ['hireDate', 'createdAt'];
+const SORT_FIELDS: StaffSortField[] = ['firstName', 'lastName', 'hireDate', 'createdAt'];
 const SEARCH_DEBOUNCE_MS = 300;
 
 function readQuery(searchParams: URLSearchParams): StaffListQuery {
@@ -63,7 +63,7 @@ export interface StaffListResult {
   refetch: () => void;
 }
 
-/** Owns the list's URL-driven query. `search` maps to the backend's `position` filter - Staff has no name of its own to search by. */
+/** Owns the list's URL-driven query. `search` maps to the backend's `name` filter (first/last name, case-insensitive). */
 export function useStaffList(): StaffListResult {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -86,7 +86,7 @@ export function useStaffList(): StaffListResult {
       .list({
         page: query.page,
         pageSize: query.pageSize,
-        position: query.search || undefined,
+        name: query.search || undefined,
         sortBy: query.sortBy,
         sortOrder: query.sortOrder,
       })
@@ -177,6 +177,69 @@ export function useClassroomStaff(classroomId: string): ClassroomStaffResult {
   }, [classroomId, reloadToken]);
 
   return { data, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
+}
+
+export interface StaffDirectoryResult {
+  staff: Staff[];
+  byId: Map<string, Staff>;
+  isLoading: boolean;
+  error: unknown;
+  refetch: () => void;
+}
+
+/**
+ * Bulk lookup source for resolving staff names in batches (the Payroll
+ * staff picker), instead of one request per row. Backed by a single request
+ * for up to the API's max page size (100), sorted by name - same documented
+ * scaling boundary as useClassroomDirectory/useMembershipDirectory.
+ */
+export function useStaffDirectory(enabled = true): StaffDirectoryResult {
+  const [staffMembers, setStaffMembers] = useState<Staff[]>([]);
+  const [isLoading, setIsLoading] = useState(enabled);
+  const [error, setError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      setStaffMembers([]);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    api.staff
+      .list({ page: 1, pageSize: 100, sortBy: 'firstName', sortOrder: 'asc' })
+      .then((result) => {
+        if (!cancelled) setStaffMembers(result.data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, reloadToken]);
+
+  const byId = useMemo(
+    () => new Map(staffMembers.map((member) => [member.id, member])),
+    [staffMembers],
+  );
+
+  return {
+    staff: staffMembers,
+    byId,
+    isLoading,
+    error,
+    refetch: () => setReloadToken((t) => t + 1),
+  };
 }
 
 export interface StaffMemberResult {

@@ -53,6 +53,8 @@ export function StaffForm(props: StaffFormProps) {
   useEffect(() => {
     if (isEdit && existing.data) {
       setValues({
+        firstName: existing.data.firstName,
+        lastName: existing.data.lastName,
         position: existing.data.position ?? '',
         hireDate: existing.data.hireDate ?? '',
       });
@@ -116,6 +118,20 @@ export function StaffForm(props: StaffFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="firstName">First name</Label>
+        <Input id="firstName" value={values.firstName} onChange={setField('firstName')} />
+        {fieldErrors.firstName && (
+          <p className="text-sm text-destructive">{fieldErrors.firstName}</p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="lastName">Last name</Label>
+        <Input id="lastName" value={values.lastName} onChange={setField('lastName')} />
+        {fieldErrors.lastName && <p className="text-sm text-destructive">{fieldErrors.lastName}</p>}
+      </div>
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="position">Position</Label>
         <Input id="position" value={values.position} onChange={setField('position')} />

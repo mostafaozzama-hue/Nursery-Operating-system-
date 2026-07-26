@@ -4,6 +4,12 @@ export class StaffResponseDto {
   @ApiProperty()
   id!: string;
 
+  @ApiProperty()
+  firstName!: string;
+
+  @ApiProperty()
+  lastName!: string;
+
   @ApiPropertyOptional()
   userId!: string | null;
 

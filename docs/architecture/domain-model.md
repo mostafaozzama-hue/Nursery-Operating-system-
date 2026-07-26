@@ -87,6 +87,8 @@ erDiagram
         uuid tenant_id FK
         uuid user_id FK "nullable"
         uuid classroom_id FK "nullable"
+        string firstName
+        string lastName
         string position
         date hireDate
     }
@@ -156,7 +158,7 @@ erDiagram
 | `Enrollment` | The historized record of a child's placement over time: which classroom, what status (`WAITLISTED`/`ACTIVE`/`WITHDRAWN`), when it started and ended, and why (`created_reason`, `ended_reason`). A child's *current* classroom/status is derived from the `Enrollment` row with `endDate IS NULL` — never stored redundantly on `Child`. |
 | `Guardian` | A tenant-scoped contact profile for a real-world person responsible for a child (parent, grandparent, authorized contact). Optionally linked to a `User` (`user_id`, nullable) for portal login — many guardians (emergency-only contacts) never need one. |
 | `ChildGuardian` | Join table expressing the many-to-many relationship between children and guardians. Carries relationship-specific facts (`relationshipType`, `isPrimaryContact`, `isEmergencyContact`, `canPickup`) on the *pairing*, not on `Guardian` — the same person could in principle relate differently to two different children. |
-| `Staff` | Employment record within a tenant (`position`, `hireDate`, primary `classroom_id`). Optionally linked to a `User` for portal login, for the same reason as `Guardian` — not every staff member needs system access. |
+| `Staff` | Employment record within a tenant. Owns `firstName`/`lastName` directly, as required fields — identity does not depend on an optional `User` link or `TenantMembership` lookup (see [ADR-0001 (product)](./adrs/0001-staff-owns-employee-profile.md)), matching how `Guardian` and `Child` already carry their own names. Also holds `position`, `hireDate`, and primary `classroom_id`. Optionally linked to a `User` for portal login, for the same reason as `Guardian` — not every staff member needs system access. |
 | `Attendance` | Daily check-in/check-out record per child. Carries its own `classroom_id` snapshot, independent of `Enrollment`, since a child's attendance-day room can differ from their ongoing placement (e.g. temporary coverage). `checked_in_by`/`checked_out_by` are dedicated actor references, written once each and never overwritten by unrelated edits to the row — unlike the generic `created_by`/`updated_by` audit columns, which could otherwise be overwritten by an unrelated correction and lose their specific meaning. |
 | `Invoice` | A billing document for one child, billed to one guardian. Carries a status lifecycle (`DRAFT`/`ISSUED`/`PARTIALLY_PAID`/`PAID`/`OVERDUE`/`VOID`) and a stored `totalAmount`. |
 | `InvoiceLineItem` | Itemized charges within an invoice (tuition, late fee, meal plan, etc.). |

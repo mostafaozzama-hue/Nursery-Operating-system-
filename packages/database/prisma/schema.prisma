@@ -305,6 +305,8 @@ model Staff {
   tenantId    String    @map("tenant_id") @db.Uuid
   userId      String?   @map("user_id") @db.Uuid
   classroomId String?   @map("classroom_id") @db.Uuid
+  firstName   String    @map("first_name")
+  lastName    String    @map("last_name")
   position    String?
   hireDate    DateTime? @map("hire_date") @db.Date
   createdBy   String?   @map("created_by") @db.Uuid

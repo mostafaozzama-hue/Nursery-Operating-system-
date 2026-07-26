@@ -23,15 +23,19 @@ describe('StaffService', () => {
       softDelete: jest.fn(),
     } as unknown as jest.Mocked<StaffRepository>;
 
-    currentTenant = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as unknown as jest.Mocked<CurrentTenantProvider>;
-    currentUser = { getUserId: jest.fn().mockReturnValue('user-1') } as unknown as jest.Mocked<CurrentUserProvider>;
+    currentTenant = {
+      getTenantId: jest.fn().mockReturnValue('tenant-1'),
+    } as unknown as jest.Mocked<CurrentTenantProvider>;
+    currentUser = {
+      getUserId: jest.fn().mockReturnValue('user-1'),
+    } as unknown as jest.Mocked<CurrentUserProvider>;
 
     service = new StaffService(repository, currentTenant, currentUser);
   });
 
   describe('create', () => {
     it('passes the resolved tenant and user to the repository', async () => {
-      const dto = { position: 'Teacher' };
+      const dto = { firstName: 'Ava', lastName: 'Smith', position: 'Teacher' };
       repository.create.mockResolvedValue({ id: 'staff-1' } as never);
 
       const result = await service.create(dto);
@@ -47,24 +51,35 @@ describe('StaffService', () => {
           clientVersion: '5.22.0',
         }),
       );
-      await expect(service.create({ position: 'Teacher' })).rejects.toThrow(ConflictException);
+      await expect(
+        service.create({ firstName: 'Ava', lastName: 'Smith', position: 'Teacher' }),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('translates an InactiveMembershipError into a 400', async () => {
       repository.create.mockRejectedValue(new InactiveMembershipError('no active membership'));
-      await expect(service.create({ position: 'Teacher' })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.create({ firstName: 'Ava', lastName: 'Smith', position: 'Teacher' }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('translates a StaffConflictError into a 409', async () => {
       repository.create.mockRejectedValue(new StaffConflictError('already linked'));
-      await expect(service.create({ position: 'Teacher' })).rejects.toThrow(ConflictException);
+      await expect(
+        service.create({ firstName: 'Ava', lastName: 'Smith', position: 'Teacher' }),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('translates a not-found userId/classroomId into a 404', async () => {
       repository.create.mockRejectedValue(new EntityNotFoundError('Classroom', 'room-x'));
-      await expect(service.create({ position: 'Teacher', classroomId: 'room-x' })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.create({
+          firstName: 'Ava',
+          lastName: 'Smith',
+          position: 'Teacher',
+          classroomId: 'room-x',
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -82,7 +97,10 @@ describe('StaffService', () => {
         sortOrder: 'desc',
       } as never);
 
-      expect(repository.findMany).toHaveBeenCalledWith('tenant-1', expect.objectContaining({ page: 1 }));
+      expect(repository.findMany).toHaveBeenCalledWith(
+        'tenant-1',
+        expect.objectContaining({ page: 1 }),
+      );
       expect(result).toEqual({
         data: [{ id: 'staff-1' }, { id: 'staff-2' }],
         meta: { total: 2, page: 1, pageSize: 20, totalPages: 1 },
@@ -108,7 +126,12 @@ describe('StaffService', () => {
 
       const result = await service.update('staff-1', { position: 'Assistant' });
 
-      expect(repository.update).toHaveBeenCalledWith('tenant-1', 'staff-1', { position: 'Assistant' }, 'user-1');
+      expect(repository.update).toHaveBeenCalledWith(
+        'tenant-1',
+        'staff-1',
+        { position: 'Assistant' },
+        'user-1',
+      );
       expect(result).toEqual({ id: 'staff-1', position: 'Assistant' });
     });
 
@@ -119,7 +142,9 @@ describe('StaffService', () => {
 
     it('translates an InactiveMembershipError into a 400', async () => {
       repository.update.mockRejectedValue(new InactiveMembershipError('no active membership'));
-      await expect(service.update('staff-1', { userId: 'user-x' })).rejects.toThrow(BadRequestException);
+      await expect(service.update('staff-1', { userId: 'user-x' })).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 

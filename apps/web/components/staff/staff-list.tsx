@@ -11,8 +11,7 @@ import { Input } from '@/components/ui/input';
 import { isApiError } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth';
 import { useClassroomDirectory } from '@/lib/classrooms/queries';
-import { useMembershipDirectory } from '@/lib/memberships/queries';
-import { formatHireDate, staffIdentityLabel } from '@/lib/staff/mapper';
+import { formatHireDate, staffFullName } from '@/lib/staff/mapper';
 import { useDeleteStaff } from '@/lib/staff/mutations';
 import { useStaffList } from '@/lib/staff/queries';
 
@@ -21,9 +20,6 @@ export function StaffList() {
   const canManage = user?.role === 'OWNER' || user?.role === 'ADMIN';
   const { data, total, totalPages, query, isLoading, error, setQuery, refetch } = useStaffList();
   const { byId: classroomsById, isLoading: classroomsLoading } = useClassroomDirectory();
-  // Gated behind canManage - GET /memberships 403s for STAFF, unlike every other domain list.
-  const { byId: membershipsById, isLoading: membershipsLoading } =
-    useMembershipDirectory(canManage);
   const { mutate: deleteStaff, isPending: isDeleting } = useDeleteStaff();
   const [pendingDelete, setPendingDelete] = useState<Staff | null>(null);
 
@@ -38,20 +34,14 @@ export function StaffList() {
     }
   };
 
-  const identityFor = (member: Staff) => {
-    const email =
-      canManage && member.userId ? membershipsById.get(member.userId)?.email : undefined;
-    return staffIdentityLabel(email, member.position);
-  };
-
-  const isLoadingAny = isLoading || classroomsLoading || (canManage && membershipsLoading);
+  const isLoadingAny = isLoading || classroomsLoading;
 
   const columns: DataTableColumn<Staff>[] = [
     {
       header: 'Staff',
       cell: (member) => (
         <Link href={`/dashboard/staff/${member.id}`} className="hover:underline">
-          {identityFor(member)}
+          {staffFullName(member)}
         </Link>
       ),
     },
@@ -87,13 +77,13 @@ export function StaffList() {
   ];
 
   const isFiltered = Boolean(query.search);
-  const pendingDeleteLabel = pendingDelete ? identityFor(pendingDelete) : '';
+  const pendingDeleteLabel = pendingDelete ? staffFullName(pendingDelete) : '';
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <Input
-          placeholder="Search by position…"
+          placeholder="Search by name…"
           defaultValue={query.search}
           onChange={(event) => setQuery({ search: event.target.value })}
           className="max-w-xs"

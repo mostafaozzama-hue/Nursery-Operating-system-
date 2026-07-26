@@ -5,39 +5,21 @@ import Link from 'next/link';
 import { DataTable, type DataTableColumn } from '@/components/common/data-table';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
-import { useAuth } from '@/lib/auth';
-import { useMembershipDirectory } from '@/lib/memberships/queries';
-import { staffIdentityLabel } from '@/lib/staff/mapper';
+import { staffFullName } from '@/lib/staff/mapper';
 import { useClassroomStaff } from '@/lib/staff/queries';
 
 /** Read-only, mirrors ClassroomChildrenSection - assignment changes happen from the staff record's own edit form, not here. */
 export function ClassroomStaffSection({ classroomId }: { classroomId: string }) {
-  const { user } = useAuth();
-  const canManage = user?.role === 'OWNER' || user?.role === 'ADMIN';
-  const {
-    data: staffMembers,
-    isLoading: staffLoading,
-    error,
-    refetch,
-  } = useClassroomStaff(classroomId);
-  // Gated behind canManage - GET /memberships 403s for STAFF, unlike every other domain read.
-  const { byId: membershipsById, isLoading: membershipsLoading } =
-    useMembershipDirectory(canManage);
-
-  const isLoading = staffLoading || (canManage && membershipsLoading);
+  const { data: staffMembers, isLoading, error, refetch } = useClassroomStaff(classroomId);
 
   const columns: DataTableColumn<Staff>[] = [
     {
       header: 'Name',
-      cell: (member) => {
-        const email =
-          canManage && member.userId ? membershipsById.get(member.userId)?.email : undefined;
-        return (
-          <Link href={`/dashboard/staff/${member.id}`} className="hover:underline">
-            {staffIdentityLabel(email, member.position)}
-          </Link>
-        );
-      },
+      cell: (member) => (
+        <Link href={`/dashboard/staff/${member.id}`} className="hover:underline">
+          {staffFullName(member)}
+        </Link>
+      ),
     },
     { header: 'Position', cell: (member) => member.position ?? '—' },
   ];

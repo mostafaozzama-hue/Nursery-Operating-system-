@@ -10,7 +10,7 @@ import { isApiError } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth';
 import { useClassroomDirectory } from '@/lib/classrooms/queries';
 import { useMembershipDirectory } from '@/lib/memberships/queries';
-import { formatHireDate, staffIdentityLabel } from '@/lib/staff/mapper';
+import { formatHireDate, staffFullName } from '@/lib/staff/mapper';
 import { useDeleteStaff } from '@/lib/staff/mutations';
 import { useStaffMember } from '@/lib/staff/queries';
 
@@ -55,7 +55,7 @@ export function StaffDetail({ staffId }: { staffId: string }) {
   }
 
   const membership = canManage && data.userId ? membershipsById.get(data.userId) : undefined;
-  const identity = staffIdentityLabel(membership?.email, data.position);
+  const identity = staffFullName(data);
   const classroomName = data.classroomId
     ? (classroomsById.get(data.classroomId)?.name ?? 'Unknown classroom')
     : null;

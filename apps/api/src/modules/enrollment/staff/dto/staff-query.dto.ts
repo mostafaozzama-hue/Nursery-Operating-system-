@@ -2,11 +2,15 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 import { PaginationQueryDto } from '../../../../common/pagination/pagination-query.dto';
 
-export const STAFF_SORT_FIELDS = ['hireDate', 'createdAt'] as const;
+export const STAFF_SORT_FIELDS = ['firstName', 'lastName', 'hireDate', 'createdAt'] as const;
 export type StaffSortField = (typeof STAFF_SORT_FIELDS)[number];
 
-/** No name/User-join search this sprint - Staff has no name of its own; filtering is limited to classroomId/position, per approved design. */
 export class StaffQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Case-insensitive partial match on first or last name' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()
