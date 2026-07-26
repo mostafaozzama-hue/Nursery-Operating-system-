@@ -1,3 +1,4 @@
+import { attendance } from './endpoints/attendance';
 import { auth } from './endpoints/auth';
 import { childGuardians } from './endpoints/child-guardians';
 import { children } from './endpoints/children';
@@ -18,4 +19,5 @@ export const api = {
   staff,
   memberships,
   payroll,
+  attendance,
 };
