@@ -12,6 +12,7 @@ Target-customer segments referenced below are defined in [vision.md](./vision.md
 2. **Every plan must feel complete for its target customer**, not artificially crippled. A Starter-plan owner should never feel the product is broken — only that certain growth-stage capabilities aren't included yet.
 3. **Local payment methods are never a paywall.** Cash, Vodafone Cash, InstaPay, and bank transfer (see [vision.md](./vision.md)) are available on every plan, including Starter — regional payment fit is a core differentiator, not an upsell.
 4. **Sensitive/HR-adjacent modules (Payroll, Medical) gate on plan, not on a per-seat add-on fee**, to keep the pricing model simple and legible to a non-technical owner.
+5. **Configuration before operations applies at every tier — depth and automation differ, the operating philosophy never does.** Starter configures the basics once (currently scoped for Billing: Classes → Plans → Fees; see [feature-map.md](./feature-map.md)'s cross-cutting principle note for where this is headed beyond Billing); Professional and Enterprise add depth on the same model. No plan should ever ask an owner to re-learn a different way of running the nursery just because they upgraded.
 
 ---
 
@@ -24,19 +25,19 @@ Target-customer segments referenced below are defined in [vision.md](./vision.md
 - Classrooms, Enrollment (including waitlist/transfer/withdrawal workflow)
 - Staff profiles (without Payroll)
 - Attendance (check-in/check-out/absence — shipped, see [roadmap.md](./roadmap.md))
-- Manual Billing and Payments recording — shipped, see [roadmap.md](./roadmap.md) — including cash, Vodafone Cash, InstaPay, and bank transfer as first-class methods
+- Billing and Payments — manual recording shipped today; basic Billing Configuration (Classes → Plans → Fees, `Plan` as a first-class entity, so recurring invoices are generated from a configured plan rather than hand-entered every time) is planned, not yet built — see [roadmap.md](./roadmap.md) Phase 1 — including cash, Vodafone Cash, InstaPay, and bank transfer as first-class payment methods
 - Basic tenant Settings (profile, timezone, membership/role management)
 - Dashboard v1 (occupancy, headcount, attention list — see [design-system.md §12](./design-system.md#12-dashboard-vision))
 
 **Limitations:**
 - Single branch/site only.
 - No Payroll module (Staff records exist; formal compensation tracking is a Professional-plan capability).
-- No recurring billing automation, late-fee automation, or custom reporting — invoicing is manual, one at a time.
+- No discount/waiver rules engine, no fully automatic recurring billing, no late-fee automation, no custom reporting — those are Professional's advanced configuration layer. Starter still gets basic Billing Configuration (Classes → Plans → Fees, see Included modules above); it is not manual, line-by-line invoicing forever, only the advanced rules on top are gated.
 - No CRM/Admissions pipeline beyond a simple inquiry log.
 - Standard OWNER/ADMIN/STAFF roles only — no custom permission definitions.
 - Directory-style lookups (classroom/staff pickers) are bounded to the current 100-record page size — a non-issue at this tier's scale (see [enterprise-roadmap.md](./enterprise-roadmap.md) for why this matters at larger scale).
 
-**Upgrade path:** Moves to Professional the moment the nursery hires beyond an informal, cash-paid staff arrangement (needs Payroll), or needs recurring billing instead of manual monthly invoicing — both natural "the business is growing" signals, not arbitrary limits.
+**Upgrade path:** Moves to Professional the moment the nursery hires beyond an informal, cash-paid staff arrangement (needs Payroll), or needs the advanced billing rules — discounts, waivers, full automation — beyond Starter's basic plan-based configuration, both natural "the business is growing" signals, not arbitrary limits.
 
 ---
 
@@ -47,7 +48,7 @@ Target-customer segments referenced below are defined in [vision.md](./vision.md
 **Included modules** (Starter, plus feature-map.md's **Professional** tier):
 - Everything in Starter
 - **Payroll** (fully isolated, OWNER/ADMIN-only — already built and stable)
-- Recurring billing plans, late-fee automation, discount/sibling-rate rules
+- Advanced Billing Configuration — discount/sibling-rate rules, waivers, recurring billing automation, late-fee automation — deepening Starter's basic Classes → Plans → Fees configuration, not introducing configuration for the first time
 - Vodafone Cash / InstaPay integration (as opposed to Starter's manual recording of the same methods)
 - Activities, Meals daily logging
 - CRM (prospect/lead list, referral tracking) and richer Admissions (tour scheduling, automated follow-up)
@@ -98,7 +99,7 @@ Target-customer segments referenced below are defined in [vision.md](./vision.md
 | Target size | 5–20 children | 20–100 children | 100+ children, multi-branch |
 | Branches | 1 | 1 | Multiple |
 | Payroll | ✗ | ✓ | ✓ (+ history/versioning) |
-| Billing automation | Manual only | Recurring + late fees | + consolidated multi-branch |
+| Billing configuration | Basic (Classes → Plans → Fees) | + Discounts, waivers, recurring automation, late fees | + consolidated multi-branch |
 | Roles/permissions | Fixed 3-tier | Fixed 3-tier | Custom |
 | CRM / Admissions | Basic inquiry log | Full pipeline | + cross-branch routing |
 | Medical / Learning | ✗ | ✗ | ✓ |

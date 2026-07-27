@@ -10,6 +10,8 @@
 
 **Status legend:** ✅ Built (backend + frontend) · ⚙️ Backend only, frontend pending · ⬜ Not started.
 
+**Cross-cutting principle — configuration before operations:** several domains below (Billing, Attendance, Settings) each carry a "configuration" line item that isn't a one-off coincidence — it's the same product principle applied per domain: an owner configures how the nursery runs (classes, plans, fees, discounts, waivers, accepted payment methods, attendance rules, working hours, holidays) once, before daily operations begin, so the recurring case runs itself and manual entry is reserved for genuine exceptions. Billing's instance (`Plan` as a first-class entity — see [Billing](#billing)) is the first and currently most-developed one, and is roadmapped; the Attendance and Settings instances are named for inventory completeness but not yet scoped into a phase. None of this exists in `domain-model.md` today.
+
 ---
 
 ## Admissions
@@ -73,7 +75,7 @@ Daily check-in/check-out. **Built** (backend + frontend) — Attendance module (
 - **MVP:** Daily check-in/check-out per child ✅; mark-absent ✅; classroom-scoped daily attendance view (frontend) ✅; correction workflow for OWNER/ADMIN ✅.
 - **Professional:** Attendance reports (by child, by classroom, by date range) ⬜; late-pickup / early-drop-off flagging ⬜.
 - **Enterprise:** Multi-branch attendance rollup ⬜; compliance-oriented attendance exports (ratio reporting for licensing bodies) ⬜.
-- **Future:** QR-code check-in (named explicitly in the product's Egypt/GCC requirements) ⬜; session-based attendance — multiple check-in/out per day (explicitly deferred in the domain model as a purely additive future change) ⬜; biometric/photo-based check-in ⬜.
+- **Future:** QR-code check-in (named explicitly in the product's Egypt/GCC requirements) ⬜; session-based attendance — multiple check-in/out per day (explicitly deferred in the domain model as a purely additive future change) ⬜; biometric/photo-based check-in ⬜; attendance-rules configuration (working hours, holiday calendar, and — once `Plan` exists, see [Billing](#billing) — validating a check-in against the child's `Plan`-permitted attendance schedule), the same configuration-before-operations principle applied to this domain, named but not yet scoped into a tier or phase ⬜.
 
 ## Activities
 
@@ -124,8 +126,10 @@ Bus/pickup route management — not present in the current domain model at all; 
 
 Invoicing and fee management. **Built** (backend + frontend) — `Invoice`/`InvoiceLineItem` models (status lifecycle DRAFT/ISSUED/PARTIALLY_PAID/PAID/OVERDUE/VOID, `OVERDUE` derived at read time rather than stored) plus invoice creation, line-item entry, Issue/Void actions, and a Detail page showing line items and payments, billed against a single tenant-default currency (EGP) — see [enterprise-roadmap.md §4](./enterprise-roadmap.md#4-regional-localization) for why this isn't yet a per-record `currency` field.
 
-- **MVP:** Manual invoice creation and line items ✅; invoice status lifecycle ✅; frontend for creating/viewing invoices ✅.
-- **Professional:** Recurring billing plans (monthly tuition auto-generation) ⬜; late-fee automation ⬜; discount/sibling-rate rules ⬜.
+**Architectural direction, not yet built:** `Plan` becomes a first-class entity (e.g. Full Time, Half Time, Part Time, Daily), not just a price typed into an invoice line — defining price, billing cycle, the attendance schedule it permits, discount eligibility, and active/inactive status. A child is assigned to a `Plan`; invoices are normally generated from it automatically. This does not exist in `domain-model.md` today and needs its own domain-model update (and likely an ADR) before implementation — named here for product-inventory purposes only.
+
+- **MVP:** Manual invoice creation and line items ✅; invoice status lifecycle ✅; frontend for creating/viewing invoices ✅; **Billing Configuration engine (basic)** — Classes → Plans → Fees, so a child's invoice is generated from a configured `Plan` rather than hand-entered line items for the recurring case ⬜ (see [roadmap.md](./roadmap.md) Phase 1 — moved up from Professional; configuration-before-operations is now core product identity, not a Professional-only capability).
+- **Professional:** Billing Configuration engine (advanced) — discount/sibling-rate rules, waivers, recurring billing automation (monthly tuition auto-generation), late-fee automation, built on top of MVP's basic configuration rather than introducing configuration for the first time ⬜.
 - **Enterprise:** Multi-branch consolidated billing ⬜; guardian-level billing-account splitting (the deferred `BillingAccount`/`BillingAccountGuardian` entities) ⬜; per-tenant/multi-currency support (currently a single hardcoded EGP default, see [enterprise-roadmap.md §4](./enterprise-roadmap.md#4-regional-localization)) ⬜.
 - **Future:** Government/subsidy billing integrations where applicable per region ⬜.
 
@@ -229,7 +233,7 @@ Public-facing marketing site / enrollment landing pages for a nursery's own bran
 
 Tenant configuration. Currently a **placeholder page** (`PagePlaceholder`, "Coming soon") with zero implemented settings beyond what already lives implicitly in the Identity module (tenant timezone, role/membership management via the Memberships backend with no dedicated settings-page frontend).
 
-- **MVP:** Tenant profile (name, timezone — already a backend field, needs a settings UI) ⬜; membership/role management UI (backend fully exists — `TenantMembership` invite/accept/update — with no dedicated settings-page frontend yet, currently only reachable indirectly through Staff's linked-user flows) ⬜.
+- **MVP:** Tenant profile (name, timezone — already a backend field, needs a settings UI) ⬜; membership/role management UI (backend fully exists — `TenantMembership` invite/accept/update — with no dedicated settings-page frontend yet, currently only reachable indirectly through Staff's linked-user flows) ⬜; **operating configuration** — working hours, holiday calendar, and which payment methods this tenant accepts (today `PAYMENT_METHODS` is a fixed platform-wide list, not a per-tenant choice) — the configuration-before-operations principle applied to Settings specifically, named but not yet scoped into a phase ⬜.
 - **Professional:** Branding (logo, primary color) for use across parent-facing surfaces ⬜; notification preferences ⬜.
 - **Enterprise:** Multi-branch settings hierarchy (tenant-level defaults with per-branch overrides) ⬜; custom role/permission definitions beyond OWNER/ADMIN/STAFF ⬜.
 - **Future:** API key management for the future **API**/**Marketplace**/**Integrations** capability ⬜.

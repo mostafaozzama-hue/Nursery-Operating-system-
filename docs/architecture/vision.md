@@ -61,6 +61,7 @@ Nursery OS's differentiation is not "we do the same thing but cheaper" — it is
 | Device target | iPad-first | Explicitly designed and tested for inexpensive Android tablets |
 | Digital literacy assumption | Assumes tech-comfortable staff | Select-over-type, minimal-typing UX (see [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)) designed for a broad staff literacy range |
 | Scaling model | Often segmented products (a "lite" tool vs. an "enterprise" tool) | One product, one architecture, that scales from a 5-child home daycare to a multi-branch enterprise chain without a re-platform (see [pricing-strategy.md](./pricing-strategy.md)) |
+| Operating model | A record-keeper: the same fee, discount, schedule, or rule gets manually re-decided by a human every time it recurs | Configuration before operations: classes, plans, fees, discounts, waivers, accepted payment methods, attendance rules, working hours, and holidays are configured once, before the nursery starts operating — daily operations then run as their automatic consequence, and manual overrides stay the exception, not the default (see [pricing-strategy.md](./pricing-strategy.md), [roadmap.md](./roadmap.md)) |
 
 ## Product positioning
 
