@@ -6,6 +6,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { InvoiceConflictError } from './invoice-conflict.error';
 import { InvoiceSortField, InvoiceStatus } from './dto/invoice-query.dto';
+import { LineItemSortField } from './dto/line-item-query.dto';
 import { PaymentSortField } from './dto/payment-query.dto';
 
 interface FindManyOptions {
@@ -22,6 +23,13 @@ interface FindPaymentsOptions {
   page: number;
   pageSize: number;
   sortBy: PaymentSortField;
+  sortOrder: 'asc' | 'desc';
+}
+
+interface FindLineItemsOptions {
+  page: number;
+  pageSize: number;
+  sortBy: LineItemSortField;
   sortOrder: 'asc' | 'desc';
 }
 
@@ -341,6 +349,28 @@ export class InvoiceRepository {
       }
 
       return tx.invoice.update({ where: { id: invoiceId }, data: { status: 'VOID', updatedBy: actorId } });
+    });
+  }
+
+  /** Mirrors findPayments exactly - line items had no list endpoint at all until this one, discovered as a real gap while building the frontend (Invoice Detail has no other way to see what's on an invoice). */
+  findLineItems(tenantId: string, invoiceId: string, options: FindLineItemsOptions) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      await findOrThrow('Invoice', invoiceId, () =>
+        tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }),
+      );
+
+      const where: Prisma.InvoiceLineItemWhereInput = { tenantId, invoiceId, deletedAt: null };
+      const [items, total] = await Promise.all([
+        tx.invoiceLineItem.findMany({
+          where,
+          orderBy: { [options.sortBy]: options.sortOrder },
+          skip: (options.page - 1) * options.pageSize,
+          take: options.pageSize,
+        }),
+        tx.invoiceLineItem.count({ where }),
+      ]);
+
+      return { items, total };
     });
   }
 

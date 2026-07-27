@@ -7,6 +7,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateLineItemDto } from './dto/create-line-item.dto';
 import { InvoiceQueryDto } from './dto/invoice-query.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
+import { LineItemQueryDto } from './dto/line-item-query.dto';
 import { PaymentQueryDto } from './dto/payment-query.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -87,6 +88,14 @@ export class InvoiceService {
     const tenantId = this.currentTenant.getTenantId();
     const userId = this.currentUser.getUserId();
     return this.repository.void(tenantId, invoiceId, userId).catch((error) => this.translateError(error));
+  }
+
+  async findLineItems(invoiceId: string, query: LineItemQueryDto) {
+    const tenantId = this.currentTenant.getTenantId();
+    const { items, total } = await this.repository
+      .findLineItems(tenantId, invoiceId, query)
+      .catch((error) => this.translateError(error));
+    return buildPaginatedResult(items, total, query);
   }
 
   async findPayments(invoiceId: string, query: PaymentQueryDto) {

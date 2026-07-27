@@ -9,6 +9,7 @@ import { CreateLineItemDto } from './dto/create-line-item.dto';
 import { InvoiceQueryDto } from './dto/invoice-query.dto';
 import { InvoiceResponseDto } from './dto/invoice-response.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
+import { LineItemQueryDto } from './dto/line-item-query.dto';
 import { LineItemResponseDto } from './dto/line-item-response.dto';
 import { PaymentQueryDto } from './dto/payment-query.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
@@ -71,6 +72,14 @@ export class InvoiceController {
   @ApiResponse({ status: 201, type: LineItemResponseDto })
   addLineItem(@Param('invoiceId', ParseUUIDPipe) invoiceId: string, @Body() dto: CreateLineItemDto) {
     return this.invoiceService.addLineItem(invoiceId, dto);
+  }
+
+  @Get(':invoiceId/line-items')
+  @ApiOperation({ summary: 'List line items on an invoice (paginated, sortable)' })
+  @ApiParam({ name: 'invoiceId', format: 'uuid' })
+  @ApiPaginatedResponse(LineItemResponseDto)
+  findLineItems(@Param('invoiceId', ParseUUIDPipe) invoiceId: string, @Query() query: LineItemQueryDto) {
+    return this.invoiceService.findLineItems(invoiceId, query);
   }
 
   @Patch(':invoiceId/line-items/:lineItemId')

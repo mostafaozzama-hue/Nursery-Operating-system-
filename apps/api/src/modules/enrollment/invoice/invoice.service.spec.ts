@@ -25,6 +25,7 @@ describe('InvoiceService', () => {
       recordPayment: jest.fn(),
       void: jest.fn(),
       findPayments: jest.fn(),
+      findLineItems: jest.fn(),
     } as unknown as jest.Mocked<InvoiceRepository>;
 
     currentTenant = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as unknown as jest.Mocked<CurrentTenantProvider>;
@@ -173,6 +174,44 @@ describe('InvoiceService', () => {
     it('translates an already-void conflict into a 409', async () => {
       repository.void.mockRejectedValue(new InvoiceConflictError('This invoice is already void'));
       await expect(service.void('invoice-1')).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('findLineItems', () => {
+    it('returns a paginated result built from the repository output', async () => {
+      repository.findLineItems.mockResolvedValue({
+        items: [{ id: 'line-item-1' }],
+        total: 1,
+      } as never);
+
+      const result = await service.findLineItems('invoice-1', {
+        page: 1,
+        pageSize: 20,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      } as never);
+
+      expect(repository.findLineItems).toHaveBeenCalledWith(
+        'tenant-1',
+        'invoice-1',
+        expect.objectContaining({ page: 1 }),
+      );
+      expect(result).toEqual({
+        data: [{ id: 'line-item-1' }],
+        meta: { total: 1, page: 1, pageSize: 20, totalPages: 1 },
+      });
+    });
+
+    it('translates a not-found invoice into a 404', async () => {
+      repository.findLineItems.mockRejectedValue(new EntityNotFoundError('Invoice', 'invoice-1'));
+      await expect(
+        service.findLineItems('invoice-1', {
+          page: 1,
+          pageSize: 20,
+          sortBy: 'createdAt',
+          sortOrder: 'desc',
+        } as never),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
