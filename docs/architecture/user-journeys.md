@@ -24,10 +24,10 @@ Each journey below is written as the *target* experience once the relevant [road
 
 **Pain points (today):**
 - No dashboard exists — every "how's the business doing" question requires opening multiple modules and mentally aggregating.
-- No Billing/Payments frontend yet — cannot see revenue or overdue invoices at all today, despite the backend already tracking invoice status lifecycle.
+- Billing/Payments now has a frontend (Invoice list/detail, overdue status visible per-record) — but there is still no dashboard aggregating revenue/overdue-count across invoices; an Owner must open the Invoices list and read it row by row rather than seeing one glanceable number.
 - No cross-branch visibility (single-tenant assumption) — irrelevant for a single-site owner today, but a real gap once Multi-Branch matters.
 
-**Main screens:** Dashboard (once built) ⬜, Staff list/detail ✅, Payroll list/detail ✅, Classrooms list/detail ✅ (occupancy visible once the stat-chip work in [design-system.md §10.1](./design-system.md#101-entity-detail-page-pattern-target-spec) ships), Settings (once built) ⬜.
+**Main screens:** Dashboard (once built) ⬜, Staff list/detail ✅, Payroll list/detail ✅, Classrooms list/detail ✅ (occupancy visible once the stat-chip work in [design-system.md §10.1](./design-system.md#101-entity-detail-page-pattern-target-spec) ships), Invoices list/detail ✅, Settings (once built) ⬜.
 
 **Navigation flow:** Login → Dashboard (control center) → drill into a flagged item (e.g. a near-capacity classroom) → Classroom Detail → (if a staffing question) Staff Detail → (if a compensation question) the linked Payroll record via the quick-link chip described in [design-system.md §11](./design-system.md#11-navigation--information-architecture).
 
@@ -45,7 +45,7 @@ Each journey below is written as the *target* experience once the relevant [road
 **Daily workflow (target state):**
 1. Morning: checks who's present (Attendance) ✅, per classroom or via the history list's filters — a single cross-classroom "who's present right now" glance still doesn't exist until Dashboard v1's "children present today" stat card ships (§12) — and which classrooms are short-staffed.
 2. Reviews the admissions/waitlist pipeline ⬜ for decisions needed today (a family touring, a waitlist slot opening up).
-3. Handles escalations: an incident report ⬜, a billing dispute (once Billing/Payments frontend exists) ⬜, a guardian complaint.
+3. Handles escalations: an incident report ⬜, a billing dispute ✅ (Invoice Void + a new correct invoice covers the straightforward case; no dedicated dispute/adjustment workflow beyond that yet), a guardian complaint.
 4. Manages Staff ✅ day-to-day: assigns classrooms, updates positions, links portal access for a new hire.
 5. Reviews Enrollment ✅ transfers/withdrawals as they come in from teachers/front-desk.
 
@@ -97,19 +97,20 @@ Each journey below is written as the *target* experience once the relevant [road
 - Run payroll accurately and on schedule.
 
 **Daily/weekly workflow (target state):**
-1. Reviews outstanding invoices and overdue accounts ⬜ (Billing frontend not yet built; backend model exists).
-2. Records payments as they come in, across whichever method the parent actually used ⬜ — cash, mobile wallet, bank transfer, all first-class per [vision.md](./vision.md).
+1. Reviews outstanding invoices and overdue accounts ✅ — Invoice list, filterable by status, `OVERDUE` shown as a derived Badge.
+2. Records payments as they come in, across whichever method the parent actually used ✅ — cash, mobile wallet, bank transfer, card, or check, all first-class per [vision.md](./vision.md), via the Record Payment drawer on Invoice Detail.
 3. Reviews/updates Payroll records ✅ for new hires, raises, or rate changes.
-4. Runs period-end reports (revenue, outstanding balances, payroll cost) ⬜ — no reporting frontend exists yet (see [feature-map.md](./feature-map.md#reports)).
+4. Runs period-end reports (revenue, outstanding balances, payroll cost) ⬜ — no reporting frontend exists yet (see [feature-map.md](./feature-map.md#reports)); today this means manually paging through the Invoice list rather than one summary view.
 
 **Pain points (today):**
-- No Billing or Payments frontend at all — this persona's core daily job cannot currently be done inside Nursery OS, despite the backend data model already existing.
-- No local payment-method integrations (Vodafone Cash, InstaPay) — even once a frontend exists, payment recording will initially be manual entry, not reconciled automatically.
+- No local payment-method integrations (Vodafone Cash, InstaPay) — payment recording is manual entry, not reconciled automatically (Professional-tier work, see [feature-map.md](./feature-map.md#payments)).
+- No reporting/aggregation view — this persona can now do the core recording job, but "how much revenue this month" or "which accounts are overdue in total" still requires manually reading the Invoice list rather than a summary screen.
 - Payroll is a single mutable record (no history) by deliberate current design — an accountant needing "what did we pay this person last quarter" cannot get that from the system yet (flagged in [feature-map.md](./feature-map.md#payroll) as a revisit candidate).
+- All amounts display in a single hardcoded tenant-default currency (EGP) — correct for the current single-region target market, but not yet a per-tenant setting (see [enterprise-roadmap.md §4](./enterprise-roadmap.md#4-regional-localization)).
 
-**Main screens (target):** Invoice list/detail ⬜, Payment recording flow ⬜, Payroll list/detail ✅, a future Reports module ⬜.
+**Main screens (target):** Invoice list/detail ✅, Payment recording flow ✅ (Record Payment drawer), Payroll list/detail ✅, a future Reports module ⬜.
 
-**Navigation flow:** Login → Billing/Payments module (once built, likely under a future **Finance** sidebar group per [design-system.md §11](./design-system.md#11-navigation--information-architecture)) → Guardian Detail (to check billing history/contact before following up) → back to Billing to record a payment → Payroll for staff compensation tasks.
+**Navigation flow:** Login → Invoices (reachable via the general nav today, not yet under a dedicated **Finance** sidebar group per [design-system.md §11](./design-system.md#11-navigation--information-architecture)) → Guardian Detail (to check billing history/contact before following up) → back to an Invoice to record a payment → Payroll for staff compensation tasks.
 
 ---
 
@@ -167,4 +168,4 @@ Each journey below is written as the *target* experience once the relevant [road
 
 - **Attendance has shipped** (backend + frontend) and directly resolves the daily-workflow gap for three of the four journeys that depended on it — Manager, Teacher, Receptionist can all now check in/out/mark absent and see the results. **Parent remains blocked**, not by Attendance itself but by the entirely separate, still-unbuilt Parent portal ([feature-map.md](./feature-map.md#parent-app)) — the data now exists to eventually surface an "Attendance history" tab there (see the Parent journey above), but nothing about Attendance shipping unblocks a Parent until that portal itself is built.
 - **No persona currently has a task-optimized entry point** — every role lands on the same general admin app today. The Dashboard (Owner/Manager), a Teacher-mode roster view, and a genuinely separate Parent portal are all distinct surfaces this product needs, not variations of one generic screen.
-- **Billing/Payments frontend absence blocks two full personas** (Accountant, Parent) from having any real workflow in the product at all today, despite complete backend support — this is a strong signal for roadmap sequencing (see [roadmap.md](./roadmap.md)).
+- **Billing/Payments has shipped** and directly resolves the Accountant's core daily job (invoice review, payment recording) — the second, larger of the two personas this gap named. **Parent remains blocked**, same as with Attendance, not by Billing/Payments itself but by the still-unbuilt Parent portal ([feature-map.md](./feature-map.md#parent-app)) — the data now exists to eventually surface an "Invoices" tab there, but nothing about Billing/Payments shipping unblocks a Parent until that portal is built.

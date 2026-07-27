@@ -24,7 +24,7 @@ Target-customer segments referenced below are defined in [vision.md](./vision.md
 - Classrooms, Enrollment (including waitlist/transfer/withdrawal workflow)
 - Staff profiles (without Payroll)
 - Attendance (check-in/check-out/absence — shipped, see [roadmap.md](./roadmap.md))
-- Manual Billing and Payments recording (once their frontend ships), including cash, Vodafone Cash, InstaPay, and bank transfer as first-class methods
+- Manual Billing and Payments recording — shipped, see [roadmap.md](./roadmap.md) — including cash, Vodafone Cash, InstaPay, and bank transfer as first-class methods
 - Basic tenant Settings (profile, timezone, membership/role management)
 - Dashboard v1 (occupancy, headcount, attention list — see [design-system.md §12](./design-system.md#12-dashboard-vision))
 

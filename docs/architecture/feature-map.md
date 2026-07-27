@@ -122,18 +122,18 @@ Bus/pickup route management — not present in the current domain model at all; 
 
 ## Billing
 
-Invoicing and fee management. **Backend built** (`Invoice`, `InvoiceLineItem` models — status lifecycle DRAFT/ISSUED/PARTIALLY_PAID/PAID/OVERDUE/VOID, `OVERDUE` derived at read time rather than stored), **no frontend yet**.
+Invoicing and fee management. **Built** (backend + frontend) — `Invoice`/`InvoiceLineItem` models (status lifecycle DRAFT/ISSUED/PARTIALLY_PAID/PAID/OVERDUE/VOID, `OVERDUE` derived at read time rather than stored) plus invoice creation, line-item entry, Issue/Void actions, and a Detail page showing line items and payments, billed against a single tenant-default currency (EGP) — see [enterprise-roadmap.md §4](./enterprise-roadmap.md#4-regional-localization) for why this isn't yet a per-record `currency` field.
 
-- **MVP:** Manual invoice creation and line items ⚙️; invoice status lifecycle ⚙️; frontend for creating/viewing invoices ⬜.
+- **MVP:** Manual invoice creation and line items ✅; invoice status lifecycle ✅; frontend for creating/viewing invoices ✅.
 - **Professional:** Recurring billing plans (monthly tuition auto-generation) ⬜; late-fee automation ⬜; discount/sibling-rate rules ⬜.
-- **Enterprise:** Multi-branch consolidated billing ⬜; guardian-level billing-account splitting (the deferred `BillingAccount`/`BillingAccountGuardian` entities) ⬜.
+- **Enterprise:** Multi-branch consolidated billing ⬜; guardian-level billing-account splitting (the deferred `BillingAccount`/`BillingAccountGuardian` entities) ⬜; per-tenant/multi-currency support (currently a single hardcoded EGP default, see [enterprise-roadmap.md §4](./enterprise-roadmap.md#4-regional-localization)) ⬜.
 - **Future:** Government/subsidy billing integrations where applicable per region ⬜.
 
 ## Payments
 
-Recording and reconciling payment against invoices. **Backend built** (`Payment` model — an invoice can have many payments, enabling partial payment without special-casing), **no frontend yet**.
+Recording and reconciling payment against invoices. **Built** (backend + frontend) — `Payment` model (an invoice can have many payments, enabling partial payment without special-casing) plus a "Record payment" drawer (`Sheet side="right"`, per [design-system.md §5.13](./design-system.md#513-drawers)) supporting cash, Vodafone Cash, InstaPay, bank transfer, card, and check as first-class methods, launched from Invoice Detail.
 
-- **MVP:** Manual payment recording against an invoice ⚙️; frontend for recording/viewing payments ⬜; cash payment support (a first-class method, not an edge case, per [vision.md](./vision.md)) ⬜.
+- **MVP:** Manual payment recording against an invoice ✅; frontend for recording/viewing payments ✅; cash payment support (a first-class method, not an edge case, per [vision.md](./vision.md)) ✅.
 - **Professional:** Vodafone Cash integration ⬜; InstaPay integration ⬜; bank transfer reconciliation workflow ⬜.
 - **Enterprise:** Card/online payment gateway integration ⬜; automated payment reconciliation against bank statements ⬜.
 - **Future:** Parent-initiated payments from the **Parent App** ⬜; payment plans/installments ⬜.

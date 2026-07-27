@@ -17,15 +17,15 @@
 
 **Feature work (already-backend, needs frontend):**
 - ~~**Attendance** frontend~~ — ✅ **shipped**: check-in/check-out/mark-absent via a tablet-first classroom daily roster, classroom-scoped daily view, OWNER/ADMIN correction workflow (audit history + detail + correction form).
-- **Billing** frontend — invoice creation/viewing (backend fully built).
-- **Payments** frontend — manual payment recording against invoices, cash/Vodafone Cash/InstaPay/bank-transfer as first-class methods on the entry form (backend fully built; integrations themselves are Phase 3).
+- ~~**Billing** frontend~~ — ✅ **shipped**: invoice creation/viewing, line items, Issue/Void actions, Detail page (single tenant-default currency, EGP — see [enterprise-roadmap.md §4](./enterprise-roadmap.md#4-regional-localization)).
+- ~~**Payments** frontend~~ — ✅ **shipped**: manual payment recording against invoices via a `Sheet side="right"` drawer, cash/Vodafone Cash/InstaPay/bank-transfer/card/check as first-class methods on the entry form (integrations themselves — automated reconciliation — remain Phase 3, per [ADR-0009](./adrs/0009-regional-payment-methods-first-class.md)).
 
 **Feature work (net new):**
 - **Dashboard v1** — occupancy, headcount, attention list, birthdays, recent activity, all client-side-aggregated from existing endpoints ([design-system.md §12](./design-system.md#12-dashboard-vision)).
 - **Settings** — tenant profile/timezone, membership/role management UI (backend exists via the Memberships module, no dedicated settings-page frontend yet).
 - Basic Admissions inquiry log (manual pipeline stages).
 
-**Already done, carried forward as-is:** Auth, Children, Guardians, Child-Guardian relationships, Classrooms, Enrollment, Staff, Payroll, **Attendance** — all built and stable per [feature-map.md](./feature-map.md), no rework planned beyond the design-system visual pass above.
+**Already done, carried forward as-is:** Auth, Children, Guardians, Child-Guardian relationships, Classrooms, Enrollment, Staff, Payroll, **Attendance**, **Billing**, **Payments** — all built and stable per [feature-map.md](./feature-map.md), no rework planned beyond the design-system visual pass above.
 
 ---
 
