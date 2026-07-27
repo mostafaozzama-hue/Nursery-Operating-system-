@@ -10,3 +10,4 @@ export * from './staff/types';
 export * from './memberships/types';
 export * from './payroll/types';
 export * from './attendance/types';
+export * from './invoices/types';
