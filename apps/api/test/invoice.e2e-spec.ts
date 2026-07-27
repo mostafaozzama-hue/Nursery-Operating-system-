@@ -243,7 +243,7 @@ describe('Invoice module (e2e)', () => {
 
     const secondPaymentRes = await agent
       .post(`/invoices/${invoice.id}/payments`)
-      .send({ amount: 125, paymentMethod: 'CARD' });
+      .send({ amount: 125, paymentMethod: 'CREDIT_DEBIT_CARD' });
     expect(secondPaymentRes.status).toBe(201);
 
     const afterSecondRes = await agent.get(`/invoices/${invoice.id}`);

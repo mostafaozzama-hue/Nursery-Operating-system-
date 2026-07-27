@@ -47,10 +47,9 @@ export const INVOICE_STATUS_BADGE_VARIANT: Record<
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   CASH: 'Cash',
-  VODAFONE_CASH: 'Vodafone Cash',
   INSTAPAY: 'InstaPay',
+  WALLET: 'Mobile wallet',
   BANK_TRANSFER: 'Bank transfer',
-  CARD: 'Card',
-  CHECK: 'Check',
+  CREDIT_DEBIT_CARD: 'Credit/debit card',
   OTHER: 'Other',
 };

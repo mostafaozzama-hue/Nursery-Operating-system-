@@ -14,11 +14,10 @@ export type InvoiceSortField = 'createdAt' | 'totalAmount';
 
 export const PAYMENT_METHODS = [
   'CASH',
-  'VODAFONE_CASH',
   'INSTAPAY',
+  'WALLET',
   'BANK_TRANSFER',
-  'CARD',
-  'CHECK',
+  'CREDIT_DEBIT_CARD',
   'OTHER',
 ] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
