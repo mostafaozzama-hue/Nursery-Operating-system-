@@ -342,13 +342,25 @@ Replace the current bare `PageTitle` + `<dl>` with this consistent anatomy on ev
 
 1. Same page title as the entity it creates/edits ("Add Staff" / "Edit Staff"), breadcrumbed correctly (§5.15 fix).
 2. Fields grouped logically in `Card` sections when a form has more than ~5 fields or spans multiple concerns (e.g. Payroll's "which staff" concern vs. "compensation" concern could become two cards) — current single flat `<form className="max-w-md flex-col gap-4">` pattern is fine for small forms (Classroom, Guardian) and should only split into sections once a form grows past that.
-3. Every enum field uses Select (§5.3), never raw `<select>` or free text for closed vocabularies.
-4. Submit button pinned to the same position across all forms (bottom, full-width on mobile, trailing-aligned on desktop), label pattern `Save changes` (edit) / `Add <Entity>` (create) — already the exact current convention, keep it verbatim.
-5. Inline field errors (current `fieldErrors` pattern) stay inline, not toasts (§5.11) — validation errors are not transient notifications, they're persistent until fixed.
+3. **Optional/exception fields collapse behind "more options" by default** — a form shows only the fields the common case needs; fields that are nullable *and* apply to a minority of records stay hidden until expanded. Concrete example: Enrollment's form shows classroom, status, dates, Plan, and billing guardian by default (the common case, 5 fields); `customRateAmount`, `depositAmount`, and `withdrawalNoticeGivenDate` are all nullable exceptions and stay behind a collapsed section, not flattened onto the page. Same single action, same single submission — this is about disclosure order, not a multi-step flow.
+4. Every enum field uses Select (§5.3), never raw `<select>` or free text for closed vocabularies.
+5. Submit button pinned to the same position across all forms (bottom, full-width on mobile, trailing-aligned on desktop), label pattern `Save changes` (edit) / `Add <Entity>` (create) — already the exact current convention, keep it verbatim.
+6. Inline field errors (current `fieldErrors` pattern) stay inline, not toasts (§5.11) — validation errors are not transient notifications, they're persistent until fixed.
 
 ---
 
 ## 11. Navigation & information architecture
+
+Nursery OS is delivered as two distinct workspaces, not one application with role-based visibility. Each has its own navigation model, built for how it's actually used — see [vision.md](./vision.md#two-workspaces-one-system).
+
+### 11.1 Workspace routing
+
+- A **STAFF** member with a classroom assignment (`Staff.classroomId`) lands in **Classroom Workspace**, on their assigned classroom, on login — no dashboard, no admin chrome first.
+- **OWNER**/**ADMIN** land in **Admin Workspace**'s Overview on login.
+- A small, always-available workspace switcher (not a nav item) lets anyone whose role permits both surfaces move between them. Access itself is unchanged from today's role gating — only the default landing screen differs by role.
+- A staff member assigned to more than one classroom sees a classroom picker in Classroom Workspace's header. A single-classroom teacher never sees it.
+
+### 11.2 Admin Workspace navigation
 
 **Target sidebar structure** (grouped, replacing the current flat list):
 
@@ -363,33 +375,58 @@ PEOPLE
 
 OPERATIONS
   Classrooms
-  Enrollment            ← currently has no standalone list page at all;
-                            add one once a capacity/waitlist view is built (§16)
+
+FINANCE
+  Invoices
+  Payments
+  Plans
+  Fees
+  Discounts              ← Professional tier only
 
 Settings                        (ungrouped, bottom)
 ```
 
+**No standalone Enrollment nav item.** Enrollment actions live inside Child Detail, and nothing today justifies a separate list page — the only thing that would (a waitlist/capacity view) doesn't exist yet. Add the nav item only when that view is a real second use case, not before (§16).
+
+**Tier-gated items are absent, not disabled.** `Discounts` (and any future tier-gated item) appears in the sidebar only for a tenant whose plan actually includes it — never shown grayed-out with an upsell prompt. A Starter-tier tenant's nav simply doesn't have the item; there is nothing to unlock in place.
+
 As future modules land, they slot into these existing groups rather than growing the flat list further:
 - **PEOPLE** eventually also holds Scheduling, Recruitment, Leave Management.
-- **OPERATIONS** eventually also holds Attendance, Daily Reports, Medical, Meals.
-- A future **FINANCE** group holds Invoices, Payments, Expenses, Accounting.
+- **OPERATIONS** eventually also holds Daily Reports, Medical, Meals.
+- **FINANCE** eventually also holds Expenses, Accounting.
 - A future **ENGAGEMENT** group holds Messaging, Parent App content, Marketing CRM, Admissions.
+
+Attendance is not in this list — it is Classroom Workspace's, not Admin Workspace's (§11.3).
 
 **Cross-module discoverability rule:** any entity that has a *meaningful, single* related entity elsewhere (Staff↔Payroll, Child↔primary Classroom) gets a quick-link chip or button on its entity header (§10.1) pointing to that related entity — this satisfies the "everything should feel connected" principle without violating deliberate module separation (Payroll stays a fully separate module/route/permission boundary; the link is pure UI convenience, not a data coupling).
 
 **Breadcrumbs** always resolve to the entity's display name, never a raw ID (current defect, §13/§15).
 
+### 11.3 Classroom Workspace navigation
+
+A classroom operating surface, not a personal teacher app — the iPad stays with the classroom; teachers sign in to operate it for their shift, and the classroom's state (who's checked in, who's still expected) is unchanged by who's currently signed in.
+
+No sidebar, no tab bar. Today, Classroom Workspace is a single screen: the classroom's daily roster (check-in/check-out/mark-absent, per §6.2's tablet rules — 44×44px targets, bottom-sheet drawers, sticky bottom action bar).
+
+Pickup authorization is not a separate screen — it surfaces inside the check-out action itself (tap check-out on a child → see who's authorized to pick up, with photo and relationship → confirm who actually did).
+
+No reserved or disabled tabs for future capabilities (Activities, Messages). Per the standing rule — don't introduce abstraction until two real use cases require it, prefer adding later over building early — a tab bar is introduced only when a second real screen exists to switch to. Today there is one.
+
+**Breadcrumbs:** none — Classroom Workspace has no navigation depth to break out of.
+
 ---
 
 ## 12. Dashboard vision
 
-The dashboard replaces `PagePlaceholder` and becomes the literal "control center" — answering *what's happening, what needs attention, what to do next* using only data already available from existing modules (no new backend required for v1; this is the cheapest, highest-impact single change available today):
+Admin Workspace's Overview. The dashboard replaces `PagePlaceholder` and becomes the literal "control center" — answering *what's happening, what needs attention, what to do next* using only data already available from existing modules (no new backend required for v1; this is the cheapest, highest-impact single change available today):
 
 **Layout (top to bottom):**
 1. **Quick actions row** — Add Child / Add Staff / Add Payroll Record / (future) Check In, as prominent buttons.
 2. **Stat cards row** (§5.16) — Active children count, Waitlisted count, Staff headcount, Classrooms near/at capacity.
-3. **Attention list** (§5.16 alert list) — anything requiring action: classrooms over capacity, staff with no payroll record, staff with no portal access (from existing Staff/Payroll/Membership data).
+3. **Attention list** (§5.16 alert list) — anything requiring action: classrooms over capacity, staff with no payroll record, staff with no portal access (from existing Staff/Payroll/Membership data), **no Plans configured yet** (once the Configuration Engine ships — a tenant with zero `Plan` rows can't auto-bill anyone, which is exactly the kind of thing this list already exists to surface).
 4. **Two-column lower section**: Recent activity (new Children/Guardians/Staff, from `createdAt`) alongside Birthdays this week/month (from `Child.dateOfBirth`).
+
+**The dashboard is not a setup wizard.** "No Plans configured" is one more attention-list item, surfaced the same way "overdue invoices" or "staff with no payroll record" are — not a guided onboarding flow, not a checklist, not a screen the dashboard becomes on a fresh tenant. New capabilities extend the existing attention-list mechanism; they don't add a second, different mechanism next to it.
 
 **Future-ready:** Attendance has shipped — its "children present today" should become the single most important stat card and move to position #1 whenever Dashboard v1 itself is built (Dashboard remains a `PagePlaceholder` today, per UXD-3; the data to power this stat card already exists via `GET /attendance`). Invoices has also shipped — "overdue invoices" should become a top-priority attention-list item whenever Dashboard v1 is built; the data already exists via `GET /invoices` filtered to `status=OVERDUE` (derived at read time, per the domain model). The dashboard's layout is designed to accept new stat cards and attention-list items without restructuring — it is a *composition* of independent widgets, not a bespoke one-off page.
 
@@ -407,6 +444,8 @@ Binding rules for all current and future modules, derived from the inconsistenci
 6. **Every destructive action goes through `ConfirmDialog`** — no exceptions, no second confirmation pattern invented.
 7. **Pickers share one implementation** — consolidate the current 5 near-duplicate picker components (Guardian/Child/Classroom/Membership/Staff) into a single generic `EntityPicker` component parameterized by directory hook + display formatter + table columns, now that a 6th and 7th picker are inevitable as more modules ship.
 8. **Every new list endpoint's `sortBy` support gets a sortable-header UI** at the same time it's built — no more "backend supports it, frontend ignores it" gaps.
+9. **Internal/backend mechanism names never appear in the UI.** `ManualOverride` is the concrete case: waiving a fee, changing a plan immediately, and adding a one-time charge are three plain-language actions to a nursery owner, backed by one shared audit mechanism — the sharing is a backend concern and stays invisible in copy, labels, and confirmation dialogs. The same rule applies to any future internal-only concept (e.g. `BillingRun`, `PaymentAllocation`) — expose what the user is doing, never the mechanism doing it.
+10. **A recurring or generated set of records is reviewed and actioned as a batch, never one at a time.** Concrete case: monthly invoice generation is Generate → Review Exceptions → Issue All, with the ability to hold back individual invoices — never a forced per-invoice click-through. A step that requires N clicks for N records defeats the purpose of the record being generated automatically in the first place.
 
 ---
 

@@ -10,6 +10,15 @@ Nursery OS exists to run a childcare business end to end — enrollment, staffin
 
 We measure success by how much time and worry we remove from the people who run and staff a nursery — the owner who used to reconcile fees by hand, the teacher who used to fill a paper attendance sheet, the parent who used to ask "did you get my payment?" over WhatsApp with no reply.
 
+## Two workspaces, one system
+
+Nursery OS is not a single admin application. It is delivered as two distinct, purpose-built workspaces:
+
+- **Admin Workspace** — the web application Owners, Managers, Accountants, and Receptionists use to manage the nursery: enrollment, staffing, billing, and configuration.
+- **Classroom Workspace** — a dedicated surface, built for a shared iPad that stays with the classroom throughout the day, that runs that classroom's daily operations. Teachers sign in to operate the classroom during their shift; the classroom's state belongs to the classroom, not to whichever teacher is currently signed in — a shift handoff changes who's signed in, not what the iPad shows.
+
+See [design-system.md §11](./design-system.md#11-navigation--information-architecture) for the navigation structure of both workspaces, and [user-journeys.md](./user-journeys.md) for how each persona moves through them.
+
 ## Long-term vision
 
 Nursery OS becomes the default system of record for early-childhood education providers across the Middle East and North Africa, then expands into a global childcare operating system, in the same category position that Toast holds for restaurants or Mindbody holds for fitness studios — the single platform an owner opens every morning, and the single app a parent trusts for everything related to their child's care.

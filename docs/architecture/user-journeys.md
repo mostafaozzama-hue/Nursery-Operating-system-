@@ -62,28 +62,27 @@ Each journey below is written as the *target* experience once the relevant [road
 
 ## Teacher
 
-**Who they are:** The highest-frequency daily user of any part of the system, and the persona with the least patience for friction — standing in a classroom, often holding a child, using a shared tablet. See [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk) and [product-principles.md](./product-principles.md) principles 3, 21, 22 for the standing design commitments this journey depends on.
+**Who they are:** The highest-frequency daily user of any part of the system, and the persona with the least patience for friction — standing in a classroom, often holding a child, using the classroom's shared iPad. They sign in to operate **Classroom Workspace** ([design-system.md §11.3](./design-system.md#113-classroom-workspace-navigation)) for their shift; the classroom's state carries over unchanged to whoever signs in next. See [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk) and [product-principles.md](./product-principles.md) principles 3, 21, 22 for the standing design commitments this journey depends on.
 
 **Goals:**
-- Complete required daily record-keeping (attendance, activities) with minimal typing, minimal taps, minimal time away from the children.
-- Know which children are assigned to their classroom today and any special instructions (allergies, pickup authorization).
+- Complete required daily record-keeping (attendance) with minimal typing, minimal taps, minimal time away from the children.
+- Know which children are assigned to their classroom today and who's authorized to pick each one up.
 - Communicate a quick update to a parent without leaving the classroom.
 
 **Daily workflow (target state):**
-1. Opens the app on a shared classroom tablet, sees their classroom roster ✅ (via Staff's classroom assignment + Classroom's children section).
-2. Checks in each child as they arrive ✅ (Attendance's classroom daily roster, tablet-optimized, 44px touch targets, bottom-sheet action drawer per [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)).
-3. Logs quick activity/meal/nap entries through the day ⬜ (select-based, minimal typing per [product-principles.md](./product-principles.md) principle 3) — Activities/Meals modules still not started (see [feature-map.md](./feature-map.md#activities)).
-4. Checks pickup authorization before releasing a child (`ChildGuardian.canPickup`, already tracked in the backend) ✅ — currently visible only via the Child Detail's Guardians section, not yet surfaced in a teacher-optimized quick-check flow.
-5. Checks out each child at end of day ✅ (same roster screen as check-in).
+1. Signs in on the classroom's iPad, sees Classroom Workspace's roster ✅ (via Staff's classroom assignment + Classroom's children section).
+2. Checks in each child as they arrive ✅ (tablet-optimized, 44px touch targets, bottom-sheet action drawer per [design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)).
+3. Checks out each child at end of day ✅, confirming pickup authorization (`ChildGuardian.canPickup`) as part of the same check-out action — not a separate lookup.
+4. Activity/meal/nap logging ⬜ remains a future daily-record-keeping gap — Activities/Meals modules not started (see [feature-map.md](./feature-map.md#activities)); Classroom Workspace gets a second screen only once that capability actually exists.
 
 **Pain points (today):**
-- No dedicated Teacher-mode entry point — Attendance's roster is fully built and tablet-optimized, but it's reachable only via the same general nav every role uses, not a persona-specific default landing screen that bypasses the Overview dashboard (see [feature-map.md](./feature-map.md#teacher-app) — the full Teacher App is Phase 3).
+- Classroom Workspace is designed ([design-system.md §11.3](./design-system.md#113-classroom-workspace-navigation)) but not yet built — Attendance's roster is fully built and tablet-optimized, but it's still reachable only via the same general nav every role uses, not wired as this role's default landing.
 - No activity/meal logging yet — attendance is solved, but this remains a second major daily-record-keeping gap for this persona.
 - Current forms use raw native `<select>`/free-text inputs (§13 rule 2 in [design-system.md](./design-system.md#13-cross-module-consistency-rules)) rather than the large, tap-friendly selection controls this persona specifically needs — Attendance itself avoids this (selection-first roster, no typing required for the common path), but other modules haven't been retrofitted.
 
-**Main screens (target):** A dedicated Teacher-mode classroom roster view ⬜ (Attendance's roster ✅ covers the *screen*, but not yet as a role-locked default landing), tablet-optimized Attendance check-in/out ✅, quick activity logging ⬜, pickup-authorization quick-check ⬜.
+**Main screens (target):** Classroom Workspace's roster ⬜ (Attendance's roster ✅ covers the *screen*, but not yet as the role-locked default landing, and not yet separated from Admin Workspace's navigation shell) — check-in, check-out with pickup-authorization confirmation, mark-absent. No other screens exist in this workspace until a second real capability (e.g. Activities) is built.
 
-**Navigation flow:** Login (ideally a lightweight, tablet-optimized login, not the current desktop-oriented one) → Classroom roster (default landing screen for this role, not the general Overview dashboard — Attendance's roster exists but isn't wired as the default landing for STAFF yet) → per-child quick actions (check-in, log activity, check-out) → done, minimal navigation depth.
+**Navigation flow:** Sign in on the classroom iPad → Classroom Workspace roster (default landing for this role, no dashboard first) → per-child check-in/check-out → done. No navigation depth beyond this.
 
 ---
 
@@ -167,5 +166,5 @@ Each journey below is written as the *target* experience once the relevant [road
 ## Cross-journey observations
 
 - **Attendance has shipped** (backend + frontend) and directly resolves the daily-workflow gap for three of the four journeys that depended on it — Manager, Teacher, Receptionist can all now check in/out/mark absent and see the results. **Parent remains blocked**, not by Attendance itself but by the entirely separate, still-unbuilt Parent portal ([feature-map.md](./feature-map.md#parent-app)) — the data now exists to eventually surface an "Attendance history" tab there (see the Parent journey above), but nothing about Attendance shipping unblocks a Parent until that portal itself is built.
-- **No persona currently has a task-optimized entry point** — every role lands on the same general admin app today. The Dashboard (Owner/Manager), a Teacher-mode roster view, and a genuinely separate Parent portal are all distinct surfaces this product needs, not variations of one generic screen.
+- **No persona currently has a task-optimized entry point** — every role lands on the same general admin app today. Admin Workspace's Dashboard (Owner/Manager), Classroom Workspace's roster (Teacher), and a genuinely separate Parent portal are all distinct surfaces this product needs, not variations of one generic screen.
 - **Billing/Payments has shipped** and directly resolves the Accountant's core daily job (invoice review, payment recording) — the second, larger of the two personas this gap named. **Parent remains blocked**, same as with Attendance, not by Billing/Payments itself but by the still-unbuilt Parent portal ([feature-map.md](./feature-map.md#parent-app)) — the data now exists to eventually surface an "Invoices" tab there, but nothing about Billing/Payments shipping unblocks a Parent until that portal is built.
