@@ -35,3 +35,4 @@ This is a deliberately separate library from [`docs/adr/`](../../adr/), which ho
 | [0014](./0014-ai-sequenced-last.md) | AI Is Deliberately Sequenced Last | Accepted |
 | [0015](./0015-backend-complete-modules-prioritized-for-frontend.md) | Backend-Complete Modules Are Prioritized for Frontend Work Ahead of Their Pricing Tier | Accepted |
 | [0016](./0016-android-tablet-priority-device.md) | Inexpensive Android Tablet Is the Priority Device, Not iPad | Accepted |
+| [0017](./0017-configuration-before-operations.md) | Configuration Before Operations, and Plan as a First-Class Entity | Accepted |
