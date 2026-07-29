@@ -3,6 +3,7 @@ import { CapacityExceededError } from '../../../common/errors/capacity-exceeded.
 import { translateNotFound } from '../../../common/errors/translate-not-found';
 import { isUniqueConstraintViolation } from '../../../common/errors/is-unique-constraint-violation';
 import { buildPaginatedResult } from '../../../common/pagination/pagination.util';
+import { EnrollmentBillingTermsConflictError } from '../enrollment-billing-terms/enrollment-billing-terms-conflict.error';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
 import { EnrollmentConflictError } from './enrollment-conflict.error';
@@ -62,7 +63,11 @@ export class EnrollmentService {
   }
 
   private translateConflict(error: unknown): never {
-    if (error instanceof EnrollmentConflictError || error instanceof CapacityExceededError) {
+    if (
+      error instanceof EnrollmentConflictError ||
+      error instanceof CapacityExceededError ||
+      error instanceof EnrollmentBillingTermsConflictError
+    ) {
       throw new ConflictException(error.message);
     }
     return translateNotFound(error);
