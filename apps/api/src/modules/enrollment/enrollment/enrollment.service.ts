@@ -1,4 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
+import { CapacityExceededError } from '../../../common/errors/capacity-exceeded.error';
 import { translateNotFound } from '../../../common/errors/translate-not-found';
 import { isUniqueConstraintViolation } from '../../../common/errors/is-unique-constraint-violation';
 import { buildPaginatedResult } from '../../../common/pagination/pagination.util';
@@ -61,7 +62,7 @@ export class EnrollmentService {
   }
 
   private translateConflict(error: unknown): never {
-    if (error instanceof EnrollmentConflictError) {
+    if (error instanceof EnrollmentConflictError || error instanceof CapacityExceededError) {
       throw new ConflictException(error.message);
     }
     return translateNotFound(error);

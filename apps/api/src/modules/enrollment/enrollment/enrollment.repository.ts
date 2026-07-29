@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { CapacityService } from '../capacity/capacity.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { EnrollmentConflictError } from './enrollment-conflict.error';
 import { EnrollmentSortField, EnrollmentStatus } from './dto/enrollment-query.dto';
@@ -38,7 +39,10 @@ interface UpdateData {
 
 @Injectable()
 export class EnrollmentRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capacity: CapacityService,
+  ) {}
 
   create(tenantId: string, data: CreateData, createdBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
@@ -48,7 +52,7 @@ export class EnrollmentRepository {
 
       let status: EnrollmentStatus = 'WAITLISTED';
       if (data.classroomId) {
-        await this.assertClassroomAvailable(tx, tenantId, data.classroomId);
+        await this.capacity.assertCapacityAvailable(tx, tenantId, data.classroomId);
         status = 'ACTIVE';
       }
 
@@ -126,7 +130,7 @@ export class EnrollmentRepository {
         throw new EnrollmentConflictError('Already assigned to this classroom');
       }
 
-      await this.assertClassroomAvailable(tx, tenantId, data.newClassroomId);
+      await this.capacity.assertCapacityAvailable(tx, tenantId, data.newClassroomId);
 
       const now = new Date();
 
@@ -178,29 +182,5 @@ export class EnrollmentRepository {
 
       return findOrThrow('Enrollment', id, () => tx.enrollment.findUnique({ where: { id } }));
     });
-  }
-
-  /**
-   * Count-then-compare has a small TOCTOU race under concurrent requests
-   * targeting the same classroom's last open seat - acceptable for the MVP
-   * (capacity overshoot by one is a minor, self-correcting operational
-   * issue, unlike double-enrolling a child).
-   */
-  private async assertClassroomAvailable(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    classroomId: string,
-  ): Promise<void> {
-    const classroom = await findOrThrow('Classroom', classroomId, () =>
-      tx.classroom.findFirst({ where: { id: classroomId, tenantId, deletedAt: null } }),
-    );
-
-    const activeCount = await tx.enrollment.count({
-      where: { tenantId, classroomId, status: 'ACTIVE', endDate: null, deletedAt: null },
-    });
-
-    if (activeCount >= classroom.capacity) {
-      throw new EnrollmentConflictError(`Classroom ${classroomId} has reached capacity`);
-    }
   }
 }

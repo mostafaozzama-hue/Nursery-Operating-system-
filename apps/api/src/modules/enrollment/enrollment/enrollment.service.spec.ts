@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
+import { CapacityExceededError } from '../../../common/errors/capacity-exceeded.error';
 import { EntityNotFoundError } from '../../../common/errors/entity-not-found.error';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
@@ -55,7 +56,7 @@ describe('EnrollmentService', () => {
     });
 
     it('translates a capacity conflict into a 409', async () => {
-      repository.create.mockRejectedValue(new EnrollmentConflictError('Classroom room-1 has reached capacity'));
+      repository.create.mockRejectedValue(new CapacityExceededError('Classroom room-1 has reached capacity'));
       await expect(service.create({ childId: 'child-1', classroomId: 'room-1' })).rejects.toThrow(
         ConflictException,
       );
