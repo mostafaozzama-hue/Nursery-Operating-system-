@@ -10,6 +10,7 @@ import { EnrollmentModule as EnrollmentRecordModule } from './enrollment/enrollm
 import { GuardianModule } from './guardian/guardian.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { PlanModule } from './plan/plan.module';
 import { StaffModule } from './staff/staff.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { StaffModule } from './staff/staff.module';
     PayrollModule,
     AttendanceModule,
     InvoiceModule,
+    PlanModule,
   ],
 })
 export class EnrollmentModule {}
