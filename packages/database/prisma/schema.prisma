@@ -11,20 +11,25 @@ datasource db {
 // modeled as Prisma relations (no enforced FK) to avoid a back-reference
 // array on User for every audited table.
 model Tenant {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  status    String    @default("ACTIVE")
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  status              String    @default("ACTIVE")
   // IANA timezone (e.g. "America/New_York"), validated at input time via
   // IsIanaTimezone. Used to compute an unambiguous local calendar day for
   // day-scoped records (Attendance's one-record-per-child-per-day
   // invariant). Defaults to UTC for tenants that don't set one.
-  timezone  String    @default("UTC")
-  createdBy String?   @map("created_by") @db.Uuid
-  updatedBy String?   @map("updated_by") @db.Uuid
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-  deletedBy String?   @map("deleted_by") @db.Uuid
+  timezone            String    @default("UTC")
+  // Configuration Engine, design only - see docs/architecture/domain-model.md.
+  // Sensible defaults so every tenant works out of the box; both are
+  // tenant-editable configuration, not fixed values.
+  billingAnchorDay    Int       @default(1) @map("billing_anchor_day")
+  billingLeadTimeDays Int       @default(7) @map("billing_lead_time_days")
+  createdBy           String?   @map("created_by") @db.Uuid
+  updatedBy           String?   @map("updated_by") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+  deletedBy           String?   @map("deleted_by") @db.Uuid
 
   memberships TenantMembership[]
   roles       Role[]
@@ -40,6 +45,23 @@ model Tenant {
   invoices          Invoice[]
   invoiceLineItems  InvoiceLineItem[]
   payments          Payment[]
+
+  // Configuration Engine, design only.
+  enrollmentBillingTerms   EnrollmentBillingTerms[]
+  plans                    Plan[]
+  planPrices               PlanPrice[]
+  fees                     Fee[]
+  planFees                 PlanFee[]
+  childFeeAssignments      ChildFeeAssignment[]
+  discounts                Discount[]
+  childDiscountAssignments ChildDiscountAssignment[]
+  siblingDiscountTiers     SiblingDiscountTier[]
+  waivers                  Waiver[]
+  holidays                 Holiday[]
+  billingRuns              BillingRun[]
+  paymentAllocations       PaymentAllocation[]
+  manualOverrides          ManualOverride[]
+  creditNotes              CreditNote[]
 
   @@index([status])
   @@map("tenants")
@@ -199,12 +221,19 @@ model Child {
   attendance  Attendance[]
   invoices    Invoice[]
 
+  // Configuration Engine, design only.
+  childFeeAssignments      ChildFeeAssignment[]
+  childDiscountAssignments ChildDiscountAssignment[]
+  waivers                  Waiver[]
+
   @@index([tenantId])
   @@map("children")
 }
 
 // Historized placement record. A child's *current* classroom/status is the
 // row where endDate IS NULL, never a mutable field on Child itself.
+// status: WAITLISTED/ACTIVE/SUSPENDED/WITHDRAWN (SUSPENDED added by the
+// Configuration Engine extension, design only).
 model Enrollment {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
@@ -225,6 +254,16 @@ model Enrollment {
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   child     Child      @relation(fields: [childId], references: [id])
   classroom Classroom? @relation(fields: [classroomId], references: [id])
+
+  // Configuration Engine, design only - 1:1 among live rows, created/closed
+  // in lockstep with Enrollment, never independently. Modeled as one-to-many
+  // in Prisma DSL (same pattern as Child.enrollments for the "at most one
+  // open" rule) because the real constraint is a partial unique index
+  // (WHERE deleted_at IS NULL, in the constraints migration) that Prisma's
+  // native @unique 1:1 requirement can't express. See domain-model.md's
+  // Entity Reference (bounded-context split: Placement/Operations vs
+  // Billing/Finance).
+  billingTerms EnrollmentBillingTerms[]
 
   // Partial unique index enrollments_child_id_open_unique (child_id, WHERE
   // end_date IS NULL AND deleted_at IS NULL) and CHECK constraint
@@ -255,6 +294,12 @@ model Guardian {
   user     User?           @relation(fields: [userId], references: [id])
   children ChildGuardian[]
   invoices Invoice[]
+
+  // Configuration Engine, design only - Guardian acts as the de facto
+  // billing account (see domain-model.md) ahead of a future BillingAccount.
+  enrollmentBillingTerms EnrollmentBillingTerms[]
+  payments               Payment[]
+  creditNotes            CreditNote[]
 
   // Partial unique index guardians_tenant_user_unique_active (tenant_id,
   // user_id, WHERE deleted_at IS NULL) lives in migration add_domain_model -
@@ -407,6 +452,11 @@ model Invoice {
   status             String
   totalAmount        Decimal   @map("total_amount") @db.Decimal(12, 2)
   dueDate            DateTime? @map("due_date") @db.Date
+  // Configuration Engine, design only - sequential, tenant-scoped,
+  // human-readable (e.g. INV-2026-000123). Backfilled onto already-shipped
+  // rows in migration 20260728130000_backfill_invoice_and_payment_data - see
+  // docs/architecture/domain-model.md.
+  invoiceNumber      String    @map("invoice_number")
   createdBy          String?   @map("created_by") @db.Uuid
   updatedBy          String?   @map("updated_by") @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at")
@@ -420,8 +470,14 @@ model Invoice {
   lineItems        InvoiceLineItem[]
   payments         Payment[]
 
+  // Configuration Engine, design only.
+  paymentAllocations   PaymentAllocation[]
+  creditNotes          CreditNote[]        @relation("CreditNoteOriginalInvoice")
+  creditNotesAppliedTo CreditNote[]        @relation("CreditNoteAppliedToInvoice")
+
   // CHECK invoices_total_amount_non_negative (total_amount >= 0) lives in
   // migration add_billing_constraints - not expressible in Prisma DSL.
+  @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
   @@index([childId])
   @@index([billedToGuardianId])
@@ -429,35 +485,51 @@ model Invoice {
 }
 
 model InvoiceLineItem {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  invoiceId   String    @map("invoice_id") @db.Uuid
-  description String
-  quantity    Decimal   @db.Decimal(10, 2)
-  unitAmount  Decimal   @map("unit_amount") @db.Decimal(12, 2)
-  totalAmount Decimal   @map("total_amount") @db.Decimal(12, 2)
-  createdBy   String?   @map("created_by") @db.Uuid
-  updatedBy   String?   @map("updated_by") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
-  deletedBy   String?   @map("deleted_by") @db.Uuid
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  invoiceId      String    @map("invoice_id") @db.Uuid
+  description    String
+  quantity       Decimal   @db.Decimal(10, 2)
+  unitAmount     Decimal   @map("unit_amount") @db.Decimal(12, 2)
+  totalAmount    Decimal   @map("total_amount") @db.Decimal(12, 2)
+  // Configuration Engine, design only - nullable for backward compatibility
+  // with already-shipped manually-entered lines. See domain-model.md.
+  sourceType     String?   @map("source_type")
+  chargeCategory String?   @map("charge_category")
+  planPriceId    String?   @map("plan_price_id") @db.Uuid
+  createdBy      String?   @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  invoice   Invoice    @relation(fields: [invoiceId], references: [id])
+  planPrice PlanPrice? @relation(fields: [planPriceId], references: [id])
 
   // CHECK invoice_line_items_quantity_positive (quantity > 0) and
   // invoice_line_items_amounts_non_negative (unit_amount >= 0 AND
   // total_amount >= 0) live in migration add_billing_constraints.
   @@index([tenantId])
   @@index([invoiceId])
+  @@index([planPriceId])
   @@map("invoice_line_items")
 }
 
+// Configuration Engine, design only - invoiceId is now nullable and
+// guardianId required: a payment is recorded against the billing party
+// (Guardian) first, with the actual amount-per-invoice tracked via
+// PaymentAllocation, not a strict 1:1 with Invoice. See domain-model.md.
 model Payment {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
-  invoiceId     String    @map("invoice_id") @db.Uuid
+  invoiceId     String?   @map("invoice_id") @db.Uuid
+  // Backfilled onto already-shipped rows (derived from
+  // invoice.billed_to_guardian_id) in migration
+  // 20260728130000_backfill_invoice_and_payment_data - per ADR-0017's note
+  // that this is a real migration cost against already-shipped data.
+  guardianId    String    @map("guardian_id") @db.Uuid
   amount        Decimal   @db.Decimal(12, 2)
   paymentMethod String    @map("payment_method")
   paidAt        DateTime  @map("paid_at")
@@ -468,12 +540,460 @@ model Payment {
   deletedAt     DateTime? @map("deleted_at")
   deletedBy     String?   @map("deleted_by") @db.Uuid
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+  guardian Guardian @relation(fields: [guardianId], references: [id])
+
+  allocations PaymentAllocation[]
 
   // CHECK payments_amount_positive (amount > 0) lives in migration
   // add_billing_constraints.
   @@index([tenantId])
   @@index([invoiceId])
+  @@index([guardianId])
   @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// Configuration Engine extension (approved design, frozen 2026-07-28, not yet
+// implemented as of this migration). See docs/architecture/domain-model.md -
+// the single source of truth for this section - and ADR-0017. Partial unique
+// indexes and CHECK constraints are deliberately not expressed here (Prisma
+// DSL can't represent them) and are deferred to raw SQL in a follow-up
+// migration, same pattern as the original domain model.
+// ---------------------------------------------------------------------------
+
+// The financial terms of one Enrollment, split into its own 1:1 table rather
+// than living directly on Enrollment - separates the Placement/Operations
+// bounded context (Enrollment itself) from Billing/Finance (this table).
+// Created and closed in lockstep with Enrollment, never independently.
+model EnrollmentBillingTerms {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                  String    @map("tenant_id") @db.Uuid
+  enrollmentId              String    @map("enrollment_id") @db.Uuid
+  planId                    String?   @map("plan_id") @db.Uuid
+  billingGuardianId         String    @map("billing_guardian_id") @db.Uuid
+  customRateAmount          Decimal?  @map("custom_rate_amount") @db.Decimal(12, 2)
+  customRateReason          String?   @map("custom_rate_reason")
+  depositAmount             Decimal?  @map("deposit_amount") @db.Decimal(12, 2)
+  depositRefundPolicy       String?   @map("deposit_refund_policy")
+  withdrawalNoticeGivenDate DateTime? @map("withdrawal_notice_given_date") @db.Date
+  createdBy                 String?   @map("created_by") @db.Uuid
+  updatedBy                 String?   @map("updated_by") @db.Uuid
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  deletedAt                 DateTime? @map("deleted_at")
+  deletedBy                 String?   @map("deleted_by") @db.Uuid
+
+  tenant          Tenant     @relation(fields: [tenantId], references: [id])
+  enrollment      Enrollment @relation(fields: [enrollmentId], references: [id])
+  plan            Plan?      @relation(fields: [planId], references: [id])
+  billingGuardian Guardian   @relation(fields: [billingGuardianId], references: [id])
+
+  // Partial unique index enrollment_billing_terms_enrollment_id_unique_active
+  // (enrollment_id, WHERE deleted_at IS NULL) - 1:1 with Enrollment - lives in
+  // the constraints migration, not expressible in Prisma DSL.
+  @@index([tenantId])
+  @@index([enrollmentId])
+  @@index([planId])
+  @@index([billingGuardianId])
+  @@map("enrollment_billing_terms")
+}
+
+// The commercial + schedule offering a child is enrolled under (Full Time,
+// Half Time, Part Time, Daily). Deliberately does not carry price directly
+// (see PlanPrice) or bundle add-ons (see Fee/PlanFee) - decomposed
+// specifically to avoid plan-explosion as offerings grow.
+model Plan {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  name               String
+  billingCycle       String    @map("billing_cycle")
+  scheduleDaysOfWeek String[]  @map("schedule_days_of_week")
+  scheduleStartTime  DateTime? @map("schedule_start_time") @db.Time
+  scheduleEndTime    DateTime? @map("schedule_end_time") @db.Time
+  isActive           Boolean   @default(true) @map("is_active")
+  createdBy          String?   @map("created_by") @db.Uuid
+  updatedBy          String?   @map("updated_by") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+  deletedBy          String?   @map("deleted_by") @db.Uuid
+
+  tenant                 Tenant                   @relation(fields: [tenantId], references: [id])
+  prices                 PlanPrice[]
+  planFees               PlanFee[]
+  enrollmentBillingTerms EnrollmentBillingTerms[]
+
+  @@index([tenantId])
+  @@map("plans")
+}
+
+// A Plan's price, historized exactly like Enrollment - one row per price
+// period. A price change never retroactively reprices an already-enrolled
+// child.
+model PlanPrice {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  planId        String    @map("plan_id") @db.Uuid
+  amount        Decimal   @db.Decimal(12, 2)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  deletedBy     String?   @map("deleted_by") @db.Uuid
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  plan             Plan              @relation(fields: [planId], references: [id])
+  invoiceLineItems InvoiceLineItem[]
+
+  // Partial unique index plan_prices_plan_id_open_unique (plan_id, WHERE
+  // effective_to IS NULL AND deleted_at IS NULL) lives in the constraints
+  // migration - at most one open-ended price per plan.
+  @@index([tenantId])
+  @@index([planId])
+  @@map("plan_prices")
+}
+
+// A recurring or one-time charge component beyond base tuition (meals,
+// transportation, registration). Mandatory-vs-optional is a property of the
+// Plan<->Fee pairing (see PlanFee), not of Fee itself.
+model Fee {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  name      String
+  amount    Decimal   @db.Decimal(12, 2)
+  type      String
+  isActive  Boolean   @default(true) @map("is_active")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.Uuid
+
+  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  planFees            PlanFee[]
+  childFeeAssignments ChildFeeAssignment[]
+
+  @@index([tenantId])
+  @@map("fees")
+}
+
+// Join table: which Fees are bundled with a Plan, and whether each is
+// mandatory for that plan or an optional add-on. The same Fee can be
+// mandatory on one Plan and optional on another.
+model PlanFee {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  planId      String    @map("plan_id") @db.Uuid
+  feeId       String    @map("fee_id") @db.Uuid
+  isMandatory Boolean   @default(false) @map("is_mandatory")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedBy   String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  plan   Plan   @relation(fields: [planId], references: [id])
+  fee    Fee    @relation(fields: [feeId], references: [id])
+
+  @@index([tenantId])
+  @@index([planId])
+  @@index([feeId])
+  @@map("plan_fees")
+}
+
+// Historized (like Enrollment) record of which optional Fees a specific
+// child has opted into, beyond what's mandatory for their Plan.
+model ChildFeeAssignment {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  childId        String    @map("child_id") @db.Uuid
+  feeId          String    @map("fee_id") @db.Uuid
+  // Captured at assignment time - Fee.amount changing later never reprices
+  // this assignment.
+  snapshotAmount Decimal   @map("snapshot_amount") @db.Decimal(12, 2)
+  effectiveFrom  DateTime  @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to") @db.Date
+  createdBy      String?   @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  child  Child  @relation(fields: [childId], references: [id])
+  fee    Fee    @relation(fields: [feeId], references: [id])
+
+  @@index([tenantId])
+  @@index([childId])
+  @@index([feeId])
+  @@map("child_fee_assignments")
+}
+
+// A configured, reusable reduction rule - PERCENTAGE or FIXED_AMOUNT, tagged
+// stackable or not (exclusive - best-for-the-family wins).
+model Discount {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  name      String
+  type      String
+  amount    Decimal   @db.Decimal(12, 2)
+  stackable Boolean   @default(false)
+  scope     String    @default("BASE_TUITION_ONLY")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.Uuid
+
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
+  childDiscountAssignments ChildDiscountAssignment[]
+
+  @@index([tenantId])
+  @@map("discounts")
+}
+
+// A specific Discount applied to a specific child - historized, supporting
+// an expiring promotional discount via effectiveTo.
+model ChildDiscountAssignment {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  childId        String    @map("child_id") @db.Uuid
+  discountId     String    @map("discount_id") @db.Uuid
+  // Captured at assignment time - Discount.amount changing later never
+  // reprices this assignment.
+  snapshotAmount Decimal   @map("snapshot_amount") @db.Decimal(12, 2)
+  effectiveFrom  DateTime  @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to") @db.Date
+  createdBy      String?   @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  child    Child    @relation(fields: [childId], references: [id])
+  discount Discount @relation(fields: [discountId], references: [id])
+
+  @@index([tenantId])
+  @@index([childId])
+  @@index([discountId])
+  @@map("child_discount_assignments")
+}
+
+// A tenant-configured table (siblingCountThreshold -> discountPercentage).
+// Never assigned per-child - computed dynamically at invoice-generation
+// time. Always an additional stackable reduction (see domain-model.md).
+model SiblingDiscountTier {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  siblingCountThreshold Int       @map("sibling_count_threshold")
+  discountPercentage    Decimal   @map("discount_percentage") @db.Decimal(5, 2)
+  effectiveFrom         DateTime  @map("effective_from") @db.Date
+  effectiveTo           DateTime? @map("effective_to") @db.Date
+  createdBy             String?   @map("created_by") @db.Uuid
+  updatedBy             String?   @map("updated_by") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  deletedAt             DateTime? @map("deleted_at")
+  deletedBy             String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  // Partial unique index sibling_discount_tiers_threshold_open_unique
+  // (tenant_id, sibling_count_threshold, WHERE effective_to IS NULL AND
+  // deleted_at IS NULL) lives in the constraints migration.
+  @@index([tenantId])
+  @@map("sibling_discount_tiers")
+}
+
+// A full or partial reduction for one child. Always requires effectiveFrom
+// and either effectiveTo or reviewAnnually. Applies last, after all
+// Discounts, against the post-discount subtotal.
+model Waiver {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  childId        String    @map("child_id") @db.Uuid
+  type           String
+  percentage     Decimal   @db.Decimal(5, 2)
+  reasonCode     String    @map("reason_code")
+  reasonNote     String?   @map("reason_note")
+  effectiveFrom  DateTime  @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to") @db.Date
+  reviewAnnually Boolean   @default(false) @map("review_annually")
+  // OWNER/ADMIN-only actor. Not modeled as a Prisma relation, matching the
+  // audit-only-pointer convention documented at the top of this file.
+  approvedBy     String    @map("approved_by") @db.Uuid
+  createdBy      String?   @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  child  Child  @relation(fields: [childId], references: [id])
+
+  @@index([tenantId])
+  @@index([childId])
+  @@map("waivers")
+}
+
+// An explicit, date-specific tenant closure entry - deliberately not an
+// auto-recurring rule (Islamic calendar holidays shift year to year).
+// Affects attendance/check-in validation only, never billing.
+model Holiday {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  date           DateTime  @db.Date
+  name           String
+  type           String
+  earlyCloseTime DateTime? @map("early_close_time") @db.Time
+  createdBy      String?   @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("holidays")
+}
+
+// One row per tenant per billing period, recording that invoice generation
+// happened. The idempotency anchor: re-running generation for a period with
+// an existing BillingRun updates still-DRAFT invoices in place.
+model BillingRun {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  periodStart DateTime  @map("period_start") @db.Date
+  periodEnd   DateTime  @map("period_end") @db.Date
+  status      String
+  runAt       DateTime  @map("run_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedBy   String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, periodStart, periodEnd])
+  @@index([tenantId])
+  @@map("billing_runs")
+}
+
+// Join table between Payment and Invoice - what lets one lump-sum Payment
+// spread across several outstanding Invoices, oldest-first, across all of a
+// guardian's children.
+model PaymentAllocation {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  paymentId     String    @map("payment_id") @db.Uuid
+  invoiceId     String    @map("invoice_id") @db.Uuid
+  amountApplied Decimal   @map("amount_applied") @db.Decimal(12, 2)
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  deletedBy     String?   @map("deleted_by") @db.Uuid
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  payment Payment @relation(fields: [paymentId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([tenantId])
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@map("payment_allocations")
+}
+
+// The single, unified audit trail for every exception path in the
+// Configuration Engine. relatedEntityType/relatedEntityId is a deliberate
+// polymorphic reference - not DB-enforceable (no real FK possible on a
+// polymorphic pair), application-layer responsibility only, the same
+// accepted trade-off already documented for Staff.user_id/Guardian.user_id.
+model ManualOverride {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  overrideType      String    @map("override_type")
+  reasonCode        String    @map("reason_code")
+  reasonNote        String?   @map("reason_note")
+  relatedEntityType String    @map("related_entity_type")
+  relatedEntityId   String    @map("related_entity_id") @db.Uuid
+  previousValue     String?   @map("previous_value")
+  newValue          String    @map("new_value")
+  // OWNER/ADMIN-only actor. Not modeled as a Prisma relation, matching the
+  // audit-only-pointer convention documented at the top of this file.
+  appliedBy         String    @map("applied_by") @db.Uuid
+  appliedAt         DateTime  @map("applied_at")
+  createdBy         String?   @map("created_by") @db.Uuid
+  updatedBy         String?   @map("updated_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+  deletedBy         String?   @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([relatedEntityType, relatedEntityId])
+  @@map("manual_overrides")
+}
+
+// Money owed back to a guardian - from a prorated withdrawal, a
+// retroactively-applied waiver, or an overcharge correction. References the
+// original Invoice, never edits or deletes it (ADR-0013).
+model CreditNote {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  invoiceId          String    @map("invoice_id") @db.Uuid
+  guardianId         String    @map("guardian_id") @db.Uuid
+  amount             Decimal   @db.Decimal(12, 2)
+  reasonCode         String    @map("reason_code")
+  status             String    @default("OPEN")
+  appliedToInvoiceId String?   @map("applied_to_invoice_id") @db.Uuid
+  // Reuses the exact same PaymentMethod values as Payment.paymentMethod,
+  // never a separately-maintained list.
+  refundedVia        String?   @map("refunded_via")
+  creditNoteNumber   String    @map("credit_note_number")
+  // OWNER/ADMIN-only actor and IS the record's createdBy (not a separate
+  // dedicated field) - required, unlike the generic nullable createdBy
+  // elsewhere, since creation is always authorized.
+  createdBy          String    @map("created_by") @db.Uuid
+  updatedBy          String?   @map("updated_by") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+  deletedBy          String?   @map("deleted_by") @db.Uuid
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  invoice          Invoice  @relation("CreditNoteOriginalInvoice", fields: [invoiceId], references: [id])
+  guardian         Guardian @relation(fields: [guardianId], references: [id])
+  appliedToInvoice Invoice? @relation("CreditNoteAppliedToInvoice", fields: [appliedToInvoiceId], references: [id])
+
+  // Sequential, tenant-scoped, human-readable - same convention as
+  // Invoice.invoiceNumber. Brand-new table, so NOT NULL + unique from the
+  // start (no backfill needed, unlike Invoice.invoiceNumber).
+  @@unique([tenantId, creditNoteNumber])
+  @@index([tenantId])
+  @@index([invoiceId])
+  @@index([guardianId])
+  @@index([appliedToInvoiceId])
+  @@map("credit_notes")
 }

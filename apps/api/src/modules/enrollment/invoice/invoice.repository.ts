@@ -96,6 +96,7 @@ export class InvoiceRepository {
         };
       });
       const totalAmount = lineItems.reduce((sum, li) => sum.plus(li.totalAmount), new Prisma.Decimal(0));
+      const invoiceNumber = await this.nextInvoiceNumber(tx, tenantId);
 
       return tx.invoice.create({
         data: {
@@ -104,12 +105,29 @@ export class InvoiceRepository {
           billedToGuardianId: data.billedToGuardianId,
           status: 'DRAFT',
           totalAmount,
+          invoiceNumber,
           dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
           createdBy,
           lineItems: { create: lineItems },
         },
       });
     });
+  }
+
+  /**
+   * Placeholder sequential numbering (INV-<year>-<count+1>) so invoice
+   * creation keeps working now that invoiceNumber is required - not the
+   * real Configuration Engine billing-number service, which is separate,
+   * later work per docs/architecture/domain-model.md. Locking the tenant
+   * row serializes concurrent invoice creation for that tenant within this
+   * transaction, same FOR UPDATE pattern as lockInvoice below, so two
+   * simultaneous requests can't compute the same number.
+   */
+  private async nextInvoiceNumber(tx: Prisma.TransactionClient, tenantId: string): Promise<string> {
+    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+    const count = await tx.invoice.count({ where: { tenantId } });
+    const year = new Date().getFullYear();
+    return `INV-${year}-${String(count + 1).padStart(6, '0')}`;
   }
 
   findMany(tenantId: string, options: FindManyOptions) {
@@ -327,6 +345,11 @@ export class InvoiceRepository {
         data: {
           tenantId,
           invoiceId,
+          // Configuration Engine, design only - Payment is now recorded
+          // against the billing party (Guardian) first; this direct
+          // per-invoice recording path derives it from the invoice being
+          // paid, since that's the only guardian in scope here.
+          guardianId: invoice.billedToGuardianId,
           amount,
           paymentMethod: data.paymentMethod,
           paidAt: data.paidAt ? new Date(data.paidAt) : new Date(),
