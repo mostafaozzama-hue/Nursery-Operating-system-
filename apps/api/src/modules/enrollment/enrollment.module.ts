@@ -12,6 +12,7 @@ import { GuardianModule } from './guardian/guardian.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { PlanModule } from './plan/plan.module';
+import { PlanFeeModule } from './plan-fee/plan-fee.module';
 import { PlanPriceModule } from './plan-price/plan-price.module';
 import { StaffModule } from './staff/staff.module';
 
@@ -29,6 +30,7 @@ import { StaffModule } from './staff/staff.module';
     PlanModule,
     PlanPriceModule,
     FeeModule,
+    PlanFeeModule,
   ],
 })
 export class EnrollmentModule {}
