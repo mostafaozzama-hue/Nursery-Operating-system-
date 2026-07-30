@@ -15,6 +15,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { PlanModule } from './plan/plan.module';
 import { PlanFeeModule } from './plan-fee/plan-fee.module';
 import { PlanPriceModule } from './plan-price/plan-price.module';
+import { SiblingDiscountTierModule } from './sibling-discount-tier/sibling-discount-tier.module';
 import { StaffModule } from './staff/staff.module';
 
 @Module({
@@ -33,6 +34,7 @@ import { StaffModule } from './staff/staff.module';
     FeeModule,
     PlanFeeModule,
     DiscountModule,
+    SiblingDiscountTierModule,
   ],
 })
 export class EnrollmentModule {}
