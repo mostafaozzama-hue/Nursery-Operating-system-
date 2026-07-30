@@ -10,6 +10,7 @@ import { DiscountModule } from './discount/discount.module';
 import { EnrollmentModule as EnrollmentRecordModule } from './enrollment/enrollment.module';
 import { FeeModule } from './fee/fee.module';
 import { GuardianModule } from './guardian/guardian.module';
+import { HolidayModule } from './holiday/holiday.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { PlanModule } from './plan/plan.module';
@@ -35,6 +36,7 @@ import { StaffModule } from './staff/staff.module';
     PlanFeeModule,
     DiscountModule,
     SiblingDiscountTierModule,
+    HolidayModule,
   ],
 })
 export class EnrollmentModule {}
