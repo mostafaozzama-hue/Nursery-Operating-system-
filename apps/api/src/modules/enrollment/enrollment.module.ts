@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AttendanceModule } from './attendance/attendance.module';
 import { ChildModule } from './child/child.module';
+import { ChildFeeAssignmentModule } from './child-fee-assignment/child-fee-assignment.module';
 import { ChildGuardianModule } from './child-guardian/child-guardian.module';
 import { ClassroomModule } from './classroom/classroom.module';
 // Aliased: this file's own class is also EnrollmentModule (the umbrella
@@ -23,6 +24,7 @@ import { StaffModule } from './staff/staff.module';
   imports: [
     ClassroomModule,
     ChildModule,
+    ChildFeeAssignmentModule,
     EnrollmentRecordModule,
     GuardianModule,
     ChildGuardianModule,
