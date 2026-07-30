@@ -6,6 +6,7 @@ import { ClassroomModule } from './classroom/classroom.module';
 // Aliased: this file's own class is also EnrollmentModule (the umbrella
 // grouping module) - the entity module keeps the name matching its
 // Classroom/Child siblings, so only this import needs disambiguating.
+import { DiscountModule } from './discount/discount.module';
 import { EnrollmentModule as EnrollmentRecordModule } from './enrollment/enrollment.module';
 import { FeeModule } from './fee/fee.module';
 import { GuardianModule } from './guardian/guardian.module';
@@ -31,6 +32,7 @@ import { StaffModule } from './staff/staff.module';
     PlanPriceModule,
     FeeModule,
     PlanFeeModule,
+    DiscountModule,
   ],
 })
 export class EnrollmentModule {}
