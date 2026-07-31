@@ -184,4 +184,16 @@ export class WaiverRepository {
     };
     return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
   }
+
+  /** Composable (optional tx) - WaiverService.applyRetroactively's lookup of the target Waiver. */
+  findOneComposable(tenantId: string, id: string, tx?: Prisma.TransactionClient) {
+    const run = (client: Prisma.TransactionClient) =>
+      findOrThrow('Waiver', id, () => client.waiver.findFirst({ where: { id, tenantId, deletedAt: null } }));
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
+  }
+
+  /** Opens the transaction applyRetroactively composes InvoiceService/BillingRunService/PricingEngineService/CreditNoteService/ManualOverrideService calls inside - withTenantContext stays repository-owned, mirroring BillingRunRepository.runInTransaction/OneTimeChargeRepository.runInTransaction exactly. */
+  runInTransaction<T>(tenantId: string, fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    return withTenantContext(this.prisma, tenantId, fn);
+  }
 }

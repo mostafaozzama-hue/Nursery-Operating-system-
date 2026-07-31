@@ -42,6 +42,11 @@ export class InvoiceService {
     return this.repository.findOneOrThrow(tenantId, id).catch(translateNotFound);
   }
 
+  /** Composable (optional tx) - WaiverService.applyRetroactively's entry read (status + billingRun/period in one query). */
+  findOneComposable(tenantId: string, id: string, tx?: Prisma.TransactionClient) {
+    return this.repository.findOneComposable(tenantId, id, tx).catch(translateNotFound);
+  }
+
   update(id: string, dto: UpdateInvoiceDto) {
     const tenantId = this.currentTenant.getTenantId();
     const userId = this.currentUser.getUserId();

@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { ChildDiscountAssignmentService } from '../child-discount-assignment/child-discount-assignment.service';
 import { ChildFeeAssignmentService } from '../child-fee-assignment/child-fee-assignment.service';
 import { EnrollmentBillingTermsService } from '../enrollment-billing-terms/enrollment-billing-terms.service';
 import { PlanFeeService } from '../plan-fee/plan-fee.service';
 import { PlanPriceService } from '../plan-price/plan-price.service';
 import { SiblingDiscountTierService } from '../sibling-discount-tier/sibling-discount-tier.service';
-import { WaiverService } from '../waiver/waiver.service';
 import { ComputeChargesResult, LineItemDraft } from './line-item-draft.type';
 
 const ZERO = new Prisma.Decimal(0);
@@ -15,13 +16,13 @@ const HUNDRED = new Prisma.Decimal(100);
 @Injectable()
 export class PricingEngineService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly billingTerms: EnrollmentBillingTermsService,
     private readonly planPrice: PlanPriceService,
     private readonly planFee: PlanFeeService,
     private readonly childFeeAssignment: ChildFeeAssignmentService,
     private readonly childDiscountAssignment: ChildDiscountAssignmentService,
     private readonly siblingDiscountTier: SiblingDiscountTierService,
-    private readonly waiver: WaiverService,
   ) {}
 
   async computeChargesForPeriod(
@@ -156,7 +157,7 @@ export class PricingEngineService {
     }
 
     // ---- Waivers ----
-    const waivers = await this.waiver.findEffectiveForPeriod(tenantId, childId, periodStart, periodEnd, tx);
+    const waivers = await this.findEffectiveWaivers(tenantId, childId, periodStart, periodEnd, tx);
     if (waivers.length > 0) {
       // Approved engineering interpretation: multiple simultaneous Waivers
       // combine additively by summing their percentages, capped at 100% -
@@ -182,6 +183,44 @@ export class PricingEngineService {
     }
 
     return { billedToGuardianId: terms.billingGuardianId, drafts };
+  }
+
+  /**
+   * Deliberate architectural exception.
+   *
+   * This service performs a direct waiver read to avoid a circular
+   * dependency with WaiverService.applyRetroactively.
+   *
+   * Mirrors CapacityService precedent.
+   *
+   * Do not replace with WaiverService injection without
+   * reconsidering the dependency graph.
+   *
+   * If Waiver eligibility rules become more complex in the future,
+   * revisit this decision before expanding this query.
+   */
+  private findEffectiveWaivers(
+    tenantId: string,
+    childId: string,
+    periodStart: string,
+    periodEnd: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const run = (client: Prisma.TransactionClient) => {
+      const periodStartValue = new Date(periodStart.slice(0, 10));
+      const periodEndValue = new Date(periodEnd.slice(0, 10));
+      return client.waiver.findMany({
+        where: {
+          tenantId,
+          childId,
+          deletedAt: null,
+          effectiveFrom: { lte: periodEndValue },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: periodStartValue } }],
+        },
+        orderBy: { effectiveFrom: 'asc' },
+      });
+    };
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
   }
 }
 

@@ -10,5 +10,6 @@ import { BillingRunService } from './billing-run.service';
   imports: [EnrollmentBillingTermsModule, InvoiceModule, PricingEngineModule],
   controllers: [BillingRunController],
   providers: [BillingRunService, BillingRunRepository],
+  exports: [BillingRunService],
 })
 export class BillingRunModule {}

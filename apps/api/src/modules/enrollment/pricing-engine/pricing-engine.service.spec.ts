@@ -1,23 +1,24 @@
 import { Prisma } from '@nursery-os/database';
+import { PrismaService } from '../../../prisma/prisma.service';
 import { ChildDiscountAssignmentService } from '../child-discount-assignment/child-discount-assignment.service';
 import { ChildFeeAssignmentService } from '../child-fee-assignment/child-fee-assignment.service';
 import { EnrollmentBillingTermsService } from '../enrollment-billing-terms/enrollment-billing-terms.service';
 import { PlanFeeService } from '../plan-fee/plan-fee.service';
 import { PlanPriceService } from '../plan-price/plan-price.service';
 import { SiblingDiscountTierService } from '../sibling-discount-tier/sibling-discount-tier.service';
-import { WaiverService } from '../waiver/waiver.service';
 import { PricingEngineService } from './pricing-engine.service';
 
 const D = (value: number) => new Prisma.Decimal(value);
 
 describe('PricingEngineService', () => {
+  let prisma: jest.Mocked<PrismaService>;
+  let waiverFindMany: jest.Mock;
   let billingTerms: jest.Mocked<EnrollmentBillingTermsService>;
   let planPrice: jest.Mocked<PlanPriceService>;
   let planFee: jest.Mocked<PlanFeeService>;
   let childFeeAssignment: jest.Mocked<ChildFeeAssignmentService>;
   let childDiscountAssignment: jest.Mocked<ChildDiscountAssignmentService>;
   let siblingDiscountTier: jest.Mocked<SiblingDiscountTierService>;
-  let waiver: jest.Mocked<WaiverService>;
   let service: PricingEngineService;
 
   const baseTerms = {
@@ -54,18 +55,27 @@ describe('PricingEngineService', () => {
       findEffective: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<SiblingDiscountTierService>;
 
-    waiver = {
-      findEffectiveForPeriod: jest.fn().mockResolvedValue([]),
-    } as unknown as jest.Mocked<WaiverService>;
+    // PricingEngineService reads waivers directly (mirrors CapacityService's
+    // precedent, not routed through WaiverService/WaiverModule - see
+    // pricing-engine.service.ts's findEffectiveWaivers) - so this is a
+    // PrismaService mock, not a WaiverService one. withTenantContext calls
+    // prisma.$transaction, which this simulates by just invoking the
+    // callback with a fake tx exposing the one query used.
+    waiverFindMany = jest.fn().mockResolvedValue([]);
+    prisma = {
+      $transaction: jest.fn().mockImplementation((callback) =>
+        callback({ waiver: { findMany: waiverFindMany }, $executeRaw: jest.fn() }),
+      ),
+    } as unknown as jest.Mocked<PrismaService>;
 
     service = new PricingEngineService(
+      prisma,
       billingTerms,
       planPrice,
       planFee,
       childFeeAssignment,
       childDiscountAssignment,
       siblingDiscountTier,
-      waiver,
     );
   });
 
@@ -201,10 +211,10 @@ describe('PricingEngineService', () => {
 
   describe('waivers', () => {
     it('sums percentages across multiple waivers, capped at 100%, distributed proportionally', async () => {
-      waiver.findEffectiveForPeriod.mockResolvedValue([
+      waiverFindMany.mockResolvedValue([
         { percentage: D(70), reasonCode: 'HARDSHIP' },
         { percentage: D(60), reasonCode: 'SCHOLARSHIP' },
-      ] as never);
+      ]);
 
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
@@ -220,7 +230,7 @@ describe('PricingEngineService', () => {
       childDiscountAssignment.findEffectiveForPeriod.mockResolvedValue([
         { snapshotAmount: D(5000), discount: { name: 'Huge fixed', type: 'FIXED_AMOUNT', scope: 'BASE_TUITION_ONLY', stackable: true } },
       ] as never);
-      waiver.findEffectiveForPeriod.mockResolvedValue([{ percentage: D(50), reasonCode: 'OTHER' }] as never);
+      waiverFindMany.mockResolvedValue([{ percentage: D(50), reasonCode: 'OTHER' }]);
 
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 

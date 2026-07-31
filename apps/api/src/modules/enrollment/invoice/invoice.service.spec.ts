@@ -17,6 +17,7 @@ describe('InvoiceService', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findOneOrThrow: jest.fn(),
+      findOneComposable: jest.fn(),
       update: jest.fn(),
       addLineItem: jest.fn(),
       updateLineItem: jest.fn(),
@@ -89,6 +90,22 @@ describe('InvoiceService', () => {
     it('translates EntityNotFoundError into a NotFoundException', async () => {
       repository.findOneOrThrow.mockRejectedValue(new EntityNotFoundError('Invoice', 'invoice-1'));
       await expect(service.findOne('invoice-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findOneComposable', () => {
+    it('delegates to the repository with the caller-supplied tx', async () => {
+      repository.findOneComposable.mockResolvedValue({ id: 'invoice-1', status: 'DRAFT', billingRun: null } as never);
+
+      const result = await service.findOneComposable('tenant-1', 'invoice-1', 'tx' as never);
+
+      expect(repository.findOneComposable).toHaveBeenCalledWith('tenant-1', 'invoice-1', 'tx');
+      expect(result).toEqual({ id: 'invoice-1', status: 'DRAFT', billingRun: null });
+    });
+
+    it('translates a missing invoice into a 404', async () => {
+      repository.findOneComposable.mockRejectedValue(new EntityNotFoundError('Invoice', 'invoice-1'));
+      await expect(service.findOneComposable('tenant-1', 'invoice-1')).rejects.toThrow(NotFoundException);
     });
   });
 

@@ -1,16 +1,31 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@nursery-os/database';
 import { EntityNotFoundError } from '../../../common/errors/entity-not-found.error';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
+import { BillingRunService } from '../billing-run/billing-run.service';
+import { CreditNoteService } from '../credit-note/credit-note.service';
+import { InvoiceService } from '../invoice/invoice.service';
+import { ManualOverrideService } from '../manual-override/manual-override.service';
+import { PricingEngineService } from '../pricing-engine/pricing-engine.service';
 import { WaiverConflictError } from './waiver-conflict.error';
 import { WaiverRepository } from './waiver.repository';
 import { WaiverService } from './waiver.service';
 
+const D = (value: number) => new Prisma.Decimal(value);
+
 describe('WaiverService', () => {
   let repository: jest.Mocked<WaiverRepository>;
+  let invoiceService: jest.Mocked<InvoiceService>;
+  let billingRunService: jest.Mocked<BillingRunService>;
+  let pricingEngineService: jest.Mocked<PricingEngineService>;
+  let creditNoteService: jest.Mocked<CreditNoteService>;
+  let manualOverrideService: jest.Mocked<ManualOverrideService>;
   let currentTenant: jest.Mocked<CurrentTenantProvider>;
   let currentUser: jest.Mocked<CurrentUserProvider>;
   let service: WaiverService;
+
+  const billingRunPeriod = { periodStart: new Date('2026-09-01'), periodEnd: new Date('2026-09-30') };
 
   beforeEach(() => {
     repository = {
@@ -18,14 +33,52 @@ describe('WaiverService', () => {
       update: jest.fn(),
       findForChild: jest.fn(),
       findEffectiveForPeriod: jest.fn(),
+      findOneComposable: jest.fn().mockResolvedValue({ id: 'waiver-1', reasonCode: 'HARDSHIP', reasonNote: null }),
+      runInTransaction: jest.fn().mockImplementation((_tenantId, fn) => fn('tx' as never)),
     } as unknown as jest.Mocked<WaiverRepository>;
+
+    invoiceService = {
+      findOneComposable: jest.fn().mockResolvedValue({
+        id: 'invoice-1',
+        status: 'DRAFT',
+        childId: 'child-1',
+        billedToGuardianId: 'guardian-1',
+        totalAmount: D(1000),
+        billingRun: billingRunPeriod,
+      }),
+    } as unknown as jest.Mocked<InvoiceService>;
+
+    billingRunService = {
+      regenerateInvoiceForChild: jest.fn().mockResolvedValue({ id: 'invoice-1', totalAmount: D(700) }),
+    } as unknown as jest.Mocked<BillingRunService>;
+
+    pricingEngineService = {
+      computeChargesForPeriod: jest.fn().mockResolvedValue({ billedToGuardianId: 'guardian-1', drafts: [] }),
+    } as unknown as jest.Mocked<PricingEngineService>;
+
+    creditNoteService = {
+      createComposable: jest.fn().mockResolvedValue({ id: 'credit-note-1' }),
+    } as unknown as jest.Mocked<CreditNoteService>;
+
+    manualOverrideService = {
+      record: jest.fn().mockResolvedValue({ id: 'override-1' }),
+    } as unknown as jest.Mocked<ManualOverrideService>;
 
     currentTenant = {
       getTenantId: jest.fn().mockReturnValue('tenant-1'),
     } as unknown as jest.Mocked<CurrentTenantProvider>;
     currentUser = { getUserId: jest.fn().mockReturnValue('user-1') } as unknown as jest.Mocked<CurrentUserProvider>;
 
-    service = new WaiverService(repository, currentTenant, currentUser);
+    service = new WaiverService(
+      repository,
+      invoiceService,
+      billingRunService,
+      pricingEngineService,
+      creditNoteService,
+      manualOverrideService,
+      currentTenant,
+      currentUser,
+    );
   });
 
   describe('create', () => {
@@ -133,6 +186,142 @@ describe('WaiverService', () => {
       await expect(
         service.findEffectiveForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30'),
       ).resolves.toEqual([]);
+    });
+  });
+
+  describe('applyRetroactively', () => {
+    it('DRAFT invoice: regenerates in place via BillingRunService and records a ManualOverride (no CreditNote)', async () => {
+      await service.applyRetroactively('waiver-1', 'invoice-1');
+
+      expect(billingRunService.regenerateInvoiceForChild).toHaveBeenCalledWith(
+        'tx',
+        'tenant-1',
+        'child-1',
+        '2026-09-01',
+        '2026-09-30',
+        'user-1',
+      );
+      expect(creditNoteService.createComposable).not.toHaveBeenCalled();
+      expect(manualOverrideService.record).toHaveBeenCalledWith(
+        'tx',
+        'tenant-1',
+        expect.objectContaining({
+          overrideType: 'WAIVER',
+          reasonCode: 'HARDSHIP',
+          relatedEntityType: 'Invoice',
+          relatedEntityId: 'invoice-1',
+        }),
+        'user-1',
+      );
+    });
+
+    it('ISSUED invoice: recomputes via PricingEngineService and credits the difference', async () => {
+      invoiceService.findOneComposable.mockResolvedValue({
+        id: 'invoice-1',
+        status: 'ISSUED',
+        childId: 'child-1',
+        billedToGuardianId: 'guardian-1',
+        totalAmount: D(1000),
+        billingRun: billingRunPeriod,
+      } as never);
+      pricingEngineService.computeChargesForPeriod.mockResolvedValue({
+        billedToGuardianId: 'guardian-1',
+        drafts: [{ sourceType: 'PLAN_TUITION', description: 'x', quantity: '1', unitAmount: '850', totalAmount: '850' }],
+      } as never);
+
+      await service.applyRetroactively('waiver-1', 'invoice-1');
+
+      expect(billingRunService.regenerateInvoiceForChild).not.toHaveBeenCalled();
+      expect(pricingEngineService.computeChargesForPeriod).toHaveBeenCalledWith(
+        'tenant-1',
+        'child-1',
+        '2026-09-01',
+        '2026-09-30',
+        'tx',
+      );
+      expect(creditNoteService.createComposable).toHaveBeenCalledWith(
+        'tx',
+        'tenant-1',
+        { invoiceId: 'invoice-1', guardianId: 'guardian-1', amount: expect.anything(), reasonCode: 'RETROACTIVE_WAIVER' },
+        'user-1',
+      );
+      expect(manualOverrideService.record).toHaveBeenCalledWith(
+        'tx',
+        'tenant-1',
+        expect.objectContaining({ relatedEntityType: 'CreditNote', relatedEntityId: 'credit-note-1' }),
+        'user-1',
+      );
+    });
+
+    it('PARTIALLY_PAID/PAID invoices are treated the same as ISSUED ("anything issued")', async () => {
+      invoiceService.findOneComposable.mockResolvedValue({
+        id: 'invoice-1',
+        status: 'PARTIALLY_PAID',
+        childId: 'child-1',
+        billedToGuardianId: 'guardian-1',
+        totalAmount: D(1000),
+        billingRun: billingRunPeriod,
+      } as never);
+      pricingEngineService.computeChargesForPeriod.mockResolvedValue({
+        billedToGuardianId: 'guardian-1',
+        drafts: [{ sourceType: 'PLAN_TUITION', description: 'x', quantity: '1', unitAmount: '900', totalAmount: '900' }],
+      } as never);
+
+      await service.applyRetroactively('waiver-1', 'invoice-1');
+
+      expect(creditNoteService.createComposable).toHaveBeenCalled();
+    });
+
+    it('VOID invoice: throws - unresolved business-rule gap, no invented behavior', async () => {
+      invoiceService.findOneComposable.mockResolvedValue({
+        id: 'invoice-1',
+        status: 'VOID',
+        childId: 'child-1',
+        billedToGuardianId: 'guardian-1',
+        totalAmount: D(1000),
+        billingRun: billingRunPeriod,
+      } as never);
+
+      await expect(service.applyRetroactively('waiver-1', 'invoice-1')).rejects.toThrow(/VOID/);
+      expect(creditNoteService.createComposable).not.toHaveBeenCalled();
+      expect(billingRunService.regenerateInvoiceForChild).not.toHaveBeenCalled();
+    });
+
+    it('a manually-created invoice with no BillingRun: throws - no period to recompute against', async () => {
+      invoiceService.findOneComposable.mockResolvedValue({
+        id: 'invoice-1',
+        status: 'DRAFT',
+        childId: 'child-1',
+        billedToGuardianId: 'guardian-1',
+        totalAmount: D(1000),
+        billingRun: null,
+      } as never);
+
+      await expect(service.applyRetroactively('waiver-1', 'invoice-1')).rejects.toThrow(/no associated BillingRun/);
+    });
+
+    it('Waiver.reasonCode = OWNER_FAMILY has no ManualOverride equivalent: throws - no invented mapping', async () => {
+      repository.findOneComposable.mockResolvedValue({ id: 'waiver-1', reasonCode: 'OWNER_FAMILY', reasonNote: null } as never);
+
+      await expect(service.applyRetroactively('waiver-1', 'invoice-1')).rejects.toThrow(/no corresponding ManualOverride reasonCode/);
+    });
+
+    it('recomputed total not lower than the current total: throws - no invented skip/floor behavior', async () => {
+      invoiceService.findOneComposable.mockResolvedValue({
+        id: 'invoice-1',
+        status: 'ISSUED',
+        childId: 'child-1',
+        billedToGuardianId: 'guardian-1',
+        totalAmount: D(1000),
+        billingRun: billingRunPeriod,
+      } as never);
+      pricingEngineService.computeChargesForPeriod.mockResolvedValue({
+        billedToGuardianId: 'guardian-1',
+        drafts: [{ sourceType: 'PLAN_TUITION', description: 'x', quantity: '1', unitAmount: '1000', totalAmount: '1000' }],
+      } as never);
+
+      await expect(service.applyRetroactively('waiver-1', 'invoice-1')).rejects.toThrow(/not lower than its current total/);
+      expect(creditNoteService.createComposable).not.toHaveBeenCalled();
     });
   });
 });

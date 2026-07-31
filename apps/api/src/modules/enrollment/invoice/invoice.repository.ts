@@ -226,6 +226,21 @@ export class InvoiceRepository {
     });
   }
 
+  /**
+   * Composable (optional tx) - WaiverService.applyRetroactively's entry
+   * read: resolves the invoice's current status (to branch DRAFT vs
+   * issued) and, via the joined billingRun, the period
+   * regenerateInvoiceForChild/computeChargesForPeriod need - one query,
+   * not two, since applyRetroactively needs both from its very first step.
+   */
+  findOneComposable(tenantId: string, id: string, tx?: Prisma.TransactionClient) {
+    const run = (client: Prisma.TransactionClient) =>
+      findOrThrow('Invoice', id, () =>
+        client.invoice.findFirst({ where: { id, tenantId, deletedAt: null }, include: { billingRun: true } }),
+      );
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
+  }
+
   update(tenantId: string, id: string, data: UpdateInvoiceData, updatedBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const invoice = await this.lockInvoice(tx, tenantId, id);

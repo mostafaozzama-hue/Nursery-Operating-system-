@@ -6,6 +6,7 @@ import { ChildDiscountAssignmentModule } from './child-discount-assignment/child
 import { ChildFeeAssignmentModule } from './child-fee-assignment/child-fee-assignment.module';
 import { ChildGuardianModule } from './child-guardian/child-guardian.module';
 import { ClassroomModule } from './classroom/classroom.module';
+import { CreditNoteModule } from './credit-note/credit-note.module';
 // Aliased: this file's own class is also EnrollmentModule (the umbrella
 // grouping module) - the entity module keeps the name matching its
 // Classroom/Child siblings, so only this import needs disambiguating.
@@ -51,6 +52,7 @@ import { WaiverModule } from './waiver/waiver.module';
     BillingRunModule,
     ManualOverrideModule,
     OneTimeChargeModule,
+    CreditNoteModule,
   ],
 })
 export class EnrollmentModule {}
