@@ -15,6 +15,8 @@ import { FeeModule } from './fee/fee.module';
 import { GuardianModule } from './guardian/guardian.module';
 import { HolidayModule } from './holiday/holiday.module';
 import { InvoiceModule } from './invoice/invoice.module';
+import { ManualOverrideModule } from './manual-override/manual-override.module';
+import { OneTimeChargeModule } from './one-time-charge/one-time-charge.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { PlanModule } from './plan/plan.module';
 import { PlanFeeModule } from './plan-fee/plan-fee.module';
@@ -47,6 +49,8 @@ import { WaiverModule } from './waiver/waiver.module';
     WaiverModule,
     PricingEngineModule,
     BillingRunModule,
+    ManualOverrideModule,
+    OneTimeChargeModule,
   ],
 })
 export class EnrollmentModule {}

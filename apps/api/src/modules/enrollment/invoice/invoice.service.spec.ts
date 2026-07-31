@@ -27,6 +27,7 @@ describe('InvoiceService', () => {
       findPayments: jest.fn(),
       findLineItems: jest.fn(),
       replaceGeneratedLines: jest.fn(),
+      addExceptionLineItem: jest.fn(),
       createComposable: jest.fn(),
       findByBillingRunAndChild: jest.fn(),
       findAllForBillingRun: jest.fn(),
@@ -266,6 +267,21 @@ describe('InvoiceService', () => {
       await expect(
         service.replaceGeneratedLines('tx' as never, 'tenant-1', 'invoice-1', [], 'user-1'),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('addExceptionLineItem', () => {
+    it('delegates to the repository and returns both the line item and the current invoice', async () => {
+      repository.addExceptionLineItem.mockResolvedValue({
+        lineItem: { id: 'line-1' },
+        invoice: { id: 'invoice-1', status: 'ISSUED' },
+      } as never);
+      const data = { description: 'Late pickup', quantity: 1, unitAmount: 25, chargeCategory: 'LATE_PICKUP' };
+
+      const result = await service.addExceptionLineItem('tx' as never, 'tenant-1', 'invoice-1', data, 'user-1');
+
+      expect(repository.addExceptionLineItem).toHaveBeenCalledWith('tx', 'tenant-1', 'invoice-1', data, 'user-1');
+      expect(result).toEqual({ lineItem: { id: 'line-1' }, invoice: { id: 'invoice-1', status: 'ISSUED' } });
     });
   });
 

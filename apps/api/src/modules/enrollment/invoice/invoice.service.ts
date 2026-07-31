@@ -127,6 +127,19 @@ export class InvoiceService {
     return this.repository.findAllForBillingRun(tenantId, billingRunId, tx);
   }
 
+  /** Composable, never opens its own transaction - called only by OneTimeChargeService.add. Returns the current invoice alongside the new line item so the caller can decide whether a ManualOverride is needed without a second read. */
+  addExceptionLineItem(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    invoiceId: string,
+    data: { description: string; quantity: number; unitAmount: number; chargeCategory: string },
+    actorId: string,
+  ) {
+    return this.repository
+      .addExceptionLineItem(tx, tenantId, invoiceId, data, actorId)
+      .catch((error) => this.translateError(error));
+  }
+
   async findPayments(invoiceId: string, query: PaymentQueryDto) {
     const tenantId = this.currentTenant.getTenantId();
     const { items, total } = await this.repository

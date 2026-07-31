@@ -389,6 +389,49 @@ export class InvoiceRepository {
     return findOrThrow('Invoice', invoiceId, () => tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }));
   }
 
+  /**
+   * Composable - never opens its own transaction, always runs inside the
+   * caller's (OneTimeChargeService.add). Inserts one InvoiceLineItem
+   * regardless of invoice status - the DRAFT-only rule on addLineItem
+   * above is deliberately left unchanged, this is a separate, narrower
+   * path. sourceType is fixed to ONE_TIME_CHARGE, not caller-supplied.
+   * Returns the current (locked) invoice alongside the new line item, not
+   * just the line item, so the caller can decide whether a ManualOverride
+   * is needed without a second read - the invoice is already locked and
+   * in hand here, no reason to make the caller re-fetch it.
+   */
+  async addExceptionLineItem(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    invoiceId: string,
+    data: CreateLineItemData & { chargeCategory: string },
+    actorId: string,
+  ) {
+    await this.lockInvoice(tx, tenantId, invoiceId);
+
+    const quantity = new Prisma.Decimal(data.quantity);
+    const unitAmount = new Prisma.Decimal(data.unitAmount);
+    const lineItem = await tx.invoiceLineItem.create({
+      data: {
+        tenantId,
+        invoiceId,
+        description: data.description,
+        quantity,
+        unitAmount,
+        totalAmount: quantity.times(unitAmount),
+        sourceType: 'ONE_TIME_CHARGE',
+        chargeCategory: data.chargeCategory,
+        createdBy: actorId,
+      },
+    });
+
+    await this.recomputeTotal(tx, tenantId, invoiceId, actorId);
+    const invoice = await findOrThrow('Invoice', invoiceId, () =>
+      tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }),
+    );
+    return { lineItem, invoice };
+  }
+
   issue(tenantId: string, invoiceId: string, data: IssueData, actorId: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
