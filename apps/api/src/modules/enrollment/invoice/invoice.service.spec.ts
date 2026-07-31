@@ -26,6 +26,10 @@ describe('InvoiceService', () => {
       void: jest.fn(),
       findPayments: jest.fn(),
       findLineItems: jest.fn(),
+      replaceGeneratedLines: jest.fn(),
+      createComposable: jest.fn(),
+      findByBillingRunAndChild: jest.fn(),
+      findAllForBillingRun: jest.fn(),
     } as unknown as jest.Mocked<InvoiceRepository>;
 
     currentTenant = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as unknown as jest.Mocked<CurrentTenantProvider>;
@@ -241,6 +245,50 @@ describe('InvoiceService', () => {
       await expect(
         service.findPayments('invoice-1', { page: 1, pageSize: 20, sortBy: 'paidAt', sortOrder: 'desc' } as never),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('replaceGeneratedLines', () => {
+    it('delegates to the repository with the caller-supplied tx', async () => {
+      repository.replaceGeneratedLines.mockResolvedValue({ id: 'invoice-1' } as never);
+      const drafts = [{ sourceType: 'PLAN_TUITION', description: 'Tuition', quantity: '1', unitAmount: '1000', totalAmount: '1000' }] as never;
+
+      const result = await service.replaceGeneratedLines('tx' as never, 'tenant-1', 'invoice-1', drafts, 'user-1');
+
+      expect(repository.replaceGeneratedLines).toHaveBeenCalledWith('tx', 'tenant-1', 'invoice-1', drafts, 'user-1');
+      expect(result).toEqual({ id: 'invoice-1' });
+    });
+
+    it('translates a non-DRAFT invoice into a 409', async () => {
+      repository.replaceGeneratedLines.mockRejectedValue(
+        new InvoiceConflictError('Only a draft invoice can have its generated lines replaced'),
+      );
+      await expect(
+        service.replaceGeneratedLines('tx' as never, 'tenant-1', 'invoice-1', [], 'user-1'),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('createComposable / findByBillingRunAndChild / findAllForBillingRun', () => {
+    it('delegates createComposable to the repository', async () => {
+      repository.createComposable.mockResolvedValue({ id: 'invoice-1' } as never);
+      const data = { childId: 'child-1', billedToGuardianId: 'guardian-1', billingRunId: 'run-1' };
+
+      await service.createComposable('tx' as never, 'tenant-1', data, 'user-1');
+
+      expect(repository.createComposable).toHaveBeenCalledWith('tx', 'tenant-1', data, 'user-1');
+    });
+
+    it('delegates findByBillingRunAndChild to the repository', async () => {
+      repository.findByBillingRunAndChild.mockResolvedValue(null);
+      await service.findByBillingRunAndChild('tenant-1', 'run-1', 'child-1', 'tx' as never);
+      expect(repository.findByBillingRunAndChild).toHaveBeenCalledWith('tenant-1', 'run-1', 'child-1', 'tx');
+    });
+
+    it('delegates findAllForBillingRun to the repository', async () => {
+      repository.findAllForBillingRun.mockResolvedValue([]);
+      await service.findAllForBillingRun('tenant-1', 'run-1');
+      expect(repository.findAllForBillingRun).toHaveBeenCalledWith('tenant-1', 'run-1', undefined);
     });
   });
 });

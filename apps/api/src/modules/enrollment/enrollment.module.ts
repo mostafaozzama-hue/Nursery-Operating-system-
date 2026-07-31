@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AttendanceModule } from './attendance/attendance.module';
+import { BillingRunModule } from './billing-run/billing-run.module';
 import { ChildModule } from './child/child.module';
 import { ChildDiscountAssignmentModule } from './child-discount-assignment/child-discount-assignment.module';
 import { ChildFeeAssignmentModule } from './child-fee-assignment/child-fee-assignment.module';
@@ -45,6 +46,7 @@ import { WaiverModule } from './waiver/waiver.module';
     HolidayModule,
     WaiverModule,
     PricingEngineModule,
+    BillingRunModule,
   ],
 })
 export class EnrollmentModule {}

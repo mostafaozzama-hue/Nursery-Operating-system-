@@ -19,3 +19,15 @@ export interface LineItemDraft {
   totalAmount: string;
   planPriceId?: string;
 }
+
+/**
+ * billedToGuardianId is returned alongside drafts because
+ * computeChargesForPeriod already resolves EnrollmentBillingTerms
+ * internally to compute tuition - surfacing the one field its first real
+ * consumer (BillingRunService.regenerateInvoiceForChild) needs, so it
+ * doesn't have to re-query the same row a second time.
+ */
+export interface ComputeChargesResult {
+  billedToGuardianId: string;
+  drafts: LineItemDraft[];
+}

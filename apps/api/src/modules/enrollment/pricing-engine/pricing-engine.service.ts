@@ -7,7 +7,7 @@ import { PlanFeeService } from '../plan-fee/plan-fee.service';
 import { PlanPriceService } from '../plan-price/plan-price.service';
 import { SiblingDiscountTierService } from '../sibling-discount-tier/sibling-discount-tier.service';
 import { WaiverService } from '../waiver/waiver.service';
-import { LineItemDraft } from './line-item-draft.type';
+import { ComputeChargesResult, LineItemDraft } from './line-item-draft.type';
 
 const ZERO = new Prisma.Decimal(0);
 const HUNDRED = new Prisma.Decimal(100);
@@ -30,7 +30,7 @@ export class PricingEngineService {
     periodStart: string,
     periodEnd: string,
     tx?: Prisma.TransactionClient,
-  ): Promise<LineItemDraft[]> {
+  ): Promise<ComputeChargesResult> {
     const terms = await this.billingTerms.findEffectiveForChildAndPeriod(tenantId, childId, periodStart, periodEnd, tx);
     if (!terms) {
       // Neither frozen document defines what a child with no effective
@@ -181,7 +181,7 @@ export class PricingEngineService {
       postDiscountSubtotal = ZERO;
     }
 
-    return drafts;
+    return { billedToGuardianId: terms.billingGuardianId, drafts };
   }
 }
 

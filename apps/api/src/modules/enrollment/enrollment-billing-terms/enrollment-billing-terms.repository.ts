@@ -380,6 +380,47 @@ export class EnrollmentBillingTermsRepository {
     });
   }
 
+  /**
+   * Tenant-wide version of the same ACTIVE/SUSPENDED-overlap query
+   * resolveEligibleSiblingsList already runs, without the billingGuardianId
+   * filter - "eligible children" for BillingRunService.generateForPeriod's
+   * per-child loop, reusing the same eligibility definition rather than
+   * inventing a second one (approved engineering interpretation).
+   */
+  findChildrenWithEffectiveTermsForPeriod(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const run = (client: Prisma.TransactionClient) =>
+      this.resolveChildrenWithEffectiveTerms(client, tenantId, periodStart, periodEnd);
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
+  }
+
+  private resolveChildrenWithEffectiveTerms(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+  ) {
+    const periodStartDate = new Date(periodStart);
+    const periodEndDate = new Date(periodEnd);
+
+    return tx.enrollment.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        status: { in: [...OCCUPIED_STATUSES] },
+        startDate: { lt: periodEndDate },
+        OR: [{ endDate: null }, { endDate: { gt: periodStartDate } }],
+        billingTerms: { some: {} },
+      },
+      select: { childId: true },
+      distinct: ['childId'],
+    });
+  }
+
   private async validateGuardianAndPlan(
     tx: Prisma.TransactionClient,
     tenantId: string,

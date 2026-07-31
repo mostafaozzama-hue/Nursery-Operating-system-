@@ -74,7 +74,8 @@ describe('PricingEngineService', () => {
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
       expect(planPrice.findEffective).toHaveBeenCalledWith('tenant-1', 'plan-1', '2026-09-01', undefined);
-      expect(result).toEqual([
+      expect(result.billedToGuardianId).toBe('guardian-1');
+      expect(result.drafts).toEqual([
         expect.objectContaining({
           sourceType: 'PLAN_TUITION',
           description: 'Full Time',
@@ -90,7 +91,7 @@ describe('PricingEngineService', () => {
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
       expect(planPrice.findEffective).not.toHaveBeenCalled();
-      expect(result).toEqual([
+      expect(result.drafts).toEqual([
         expect.objectContaining({ sourceType: 'PLAN_TUITION', totalAmount: '750', planPriceId: undefined }),
       ]);
     });
@@ -128,7 +129,7 @@ describe('PricingEngineService', () => {
 
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
-      const feeLines = result.filter((d) => d.sourceType === 'FEE');
+      const feeLines = result.drafts.filter((d) => d.sourceType === 'FEE');
       expect(feeLines).toEqual([
         expect.objectContaining({ description: 'Meals', totalAmount: '50' }),
         expect.objectContaining({ description: 'Extra Activity', totalAmount: '80' }),
@@ -147,7 +148,7 @@ describe('PricingEngineService', () => {
 
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
-      const discountLines = result.filter((d) => d.sourceType === 'DISCOUNT');
+      const discountLines = result.drafts.filter((d) => d.sourceType === 'DISCOUNT');
       // tuition 1000: 10% = 100, 5% = 50, best exclusive = 300 (not 200)
       expect(discountLines).toEqual([
         expect.objectContaining({ description: 'Stackable A', totalAmount: '-100' }),
@@ -165,7 +166,7 @@ describe('PricingEngineService', () => {
 
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
-      const discountLines = result.filter((d) => d.sourceType === 'DISCOUNT');
+      const discountLines = result.drafts.filter((d) => d.sourceType === 'DISCOUNT');
       // tuition 1000 + fees 200 = 1200 base for ALL_CHARGES -> 120; tuition-only base 1000 -> 100
       expect(discountLines).toEqual([
         expect.objectContaining({ description: 'All charges 10%', totalAmount: '-120' }),
@@ -207,7 +208,7 @@ describe('PricingEngineService', () => {
 
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
-      const waiverLines = result.filter((d) => d.sourceType === 'WAIVER');
+      const waiverLines = result.drafts.filter((d) => d.sourceType === 'WAIVER');
       // combined 130% capped at 100% of 1000 = 1000 total reduction, split 70:60
       expect(waiverLines).toEqual([
         expect.objectContaining({ description: 'Waiver (HARDSHIP)', totalAmount: '-538.46' }),
@@ -223,7 +224,7 @@ describe('PricingEngineService', () => {
 
       const result = await service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
 
-      const waiverLine = result.find((d) => d.sourceType === 'WAIVER');
+      const waiverLine = result.drafts.find((d) => d.sourceType === 'WAIVER');
       expect(waiverLine?.totalAmount).toBe('0');
     });
   });

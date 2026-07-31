@@ -4,10 +4,13 @@ import { getTenantLocalDate } from '../../../common/date/tenant-local-date';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
+import { LineItemDraft } from '../pricing-engine/line-item-draft.type';
 import { InvoiceConflictError } from './invoice-conflict.error';
 import { InvoiceSortField, InvoiceStatus } from './dto/invoice-query.dto';
 import { LineItemSortField } from './dto/line-item-query.dto';
 import { PaymentSortField } from './dto/payment-query.dto';
+
+const GENERATED_SOURCE_TYPES = ['PLAN_TUITION', 'FEE', 'DISCOUNT', 'WAIVER'] as const;
 
 interface FindManyOptions {
   page: number;
@@ -128,6 +131,52 @@ export class InvoiceRepository {
     const count = await tx.invoice.count({ where: { tenantId } });
     const year = new Date().getFullYear();
     return `INV-${year}-${String(count + 1).padStart(6, '0')}`;
+  }
+
+  /**
+   * Composable - always runs inside the caller's transaction
+   * (BillingRunService.regenerateInvoiceForChild), never opens its own.
+   * Creates an empty (no line items yet) DRAFT invoice tagged with
+   * billingRunId - the caller inserts its lines separately via
+   * replaceGeneratedLines, the one place lines get written from drafts.
+   * No childId/billedToGuardianId existence check here, unlike the
+   * entry-point create() - both values come from EnrollmentBillingTerms
+   * (via PricingEngineService/EnrollmentBillingTermsService), already
+   * FK-validated internal data, not raw caller input.
+   */
+  async createComposable(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    data: { childId: string; billedToGuardianId: string; billingRunId: string },
+    actorId: string,
+  ) {
+    const invoiceNumber = await this.nextInvoiceNumber(tx, tenantId);
+    return tx.invoice.create({
+      data: {
+        tenantId,
+        childId: data.childId,
+        billedToGuardianId: data.billedToGuardianId,
+        billingRunId: data.billingRunId,
+        status: 'DRAFT',
+        totalAmount: new Prisma.Decimal(0),
+        invoiceNumber,
+        createdBy: actorId,
+      },
+    });
+  }
+
+  /** Composable (optional tx) - regenerateInvoiceForChild's idempotency lookup: does an invoice already exist for this child under this billing run. */
+  findByBillingRunAndChild(tenantId: string, billingRunId: string, childId: string, tx?: Prisma.TransactionClient) {
+    const run = (client: Prisma.TransactionClient) =>
+      client.invoice.findFirst({ where: { tenantId, billingRunId, childId, deletedAt: null } });
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
+  }
+
+  /** Composable (optional tx) - BillingRunService.generateForPeriod's "already fully ISSUED" check needs every invoice under a run, not just one child's. */
+  findAllForBillingRun(tenantId: string, billingRunId: string, tx?: Prisma.TransactionClient) {
+    const run = (client: Prisma.TransactionClient) =>
+      client.invoice.findMany({ where: { tenantId, billingRunId, deletedAt: null } });
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
   }
 
   findMany(tenantId: string, options: FindManyOptions) {
@@ -289,6 +338,55 @@ export class InvoiceRepository {
 
       await this.recomputeTotal(tx, tenantId, invoiceId, actorId);
     });
+  }
+
+  /**
+   * Composable - never opens its own transaction, always runs inside the
+   * caller's (BillingRunService.regenerateInvoiceForChild). Bulk-replaces
+   * only sourceType IN (PLAN_TUITION, FEE, DISCOUNT, WAIVER) lines with
+   * drafts; ONE_TIME_CHARGE and legacy NULL-sourceType lines are never
+   * touched - the one place idempotent regeneration is implemented.
+   */
+  async replaceGeneratedLines(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    invoiceId: string,
+    drafts: LineItemDraft[],
+    actorId: string,
+  ) {
+    const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
+    if (invoice.status !== 'DRAFT') {
+      throw new InvoiceConflictError('Only a draft invoice can have its generated lines replaced');
+    }
+
+    await tx.invoiceLineItem.updateMany({
+      where: {
+        tenantId,
+        invoiceId,
+        deletedAt: null,
+        sourceType: { in: [...GENERATED_SOURCE_TYPES] },
+      },
+      data: { deletedAt: new Date(), deletedBy: actorId },
+    });
+
+    if (drafts.length > 0) {
+      await tx.invoiceLineItem.createMany({
+        data: drafts.map((draft) => ({
+          tenantId,
+          invoiceId,
+          description: draft.description,
+          quantity: new Prisma.Decimal(draft.quantity),
+          unitAmount: new Prisma.Decimal(draft.unitAmount),
+          totalAmount: new Prisma.Decimal(draft.totalAmount),
+          sourceType: draft.sourceType,
+          planPriceId: draft.planPriceId,
+          createdBy: actorId,
+        })),
+      });
+    }
+
+    await this.recomputeTotal(tx, tenantId, invoiceId, actorId);
+    return findOrThrow('Invoice', invoiceId, () => tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }));
   }
 
   issue(tenantId: string, invoiceId: string, data: IssueData, actorId: string) {

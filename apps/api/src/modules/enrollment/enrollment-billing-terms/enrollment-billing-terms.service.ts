@@ -110,6 +110,16 @@ export class EnrollmentBillingTermsService {
     return this.repository.findEligibleSiblingsForPeriod(tenantId, billingGuardianId, periodStart, periodEnd, tx);
   }
 
+  /** Composable (optional tx) - BillingRunService.generateForPeriod's "all eligible children" for a tenant + period, per the approved reuse of countEligibleSiblings' own ACTIVE/SUSPENDED-overlap definition. */
+  findChildrenWithEffectiveTermsForPeriod(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    return this.repository.findChildrenWithEffectiveTermsForPeriod(tenantId, periodStart, periodEnd, tx);
+  }
+
   private translateConflict(error: unknown): never {
     if (error instanceof EnrollmentBillingTermsConflictError) {
       throw new ConflictException(error.message);
