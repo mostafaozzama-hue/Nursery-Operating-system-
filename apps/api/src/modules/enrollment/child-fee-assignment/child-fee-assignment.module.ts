@@ -6,5 +6,6 @@ import { ChildFeeAssignmentService } from './child-fee-assignment.service';
 @Module({
   controllers: [ChildFeeAssignmentController],
   providers: [ChildFeeAssignmentService, ChildFeeAssignmentRepository],
+  exports: [ChildFeeAssignmentService],
 })
 export class ChildFeeAssignmentModule {}

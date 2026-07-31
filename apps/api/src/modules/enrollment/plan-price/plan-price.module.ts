@@ -6,5 +6,6 @@ import { PlanPriceService } from './plan-price.service';
 @Module({
   controllers: [PlanPriceController],
   providers: [PlanPriceService, PlanPriceRepository],
+  exports: [PlanPriceService],
 })
 export class PlanPriceModule {}

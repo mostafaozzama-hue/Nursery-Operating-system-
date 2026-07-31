@@ -149,6 +149,9 @@ export class ChildFeeAssignmentRepository {
           effectiveFrom: { lte: periodEndValue },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: periodStartValue } }],
         },
+        // Added for PricingEngineService - Fee.name for the line's
+        // description (the amount itself is already on snapshotAmount).
+        include: { fee: true },
         orderBy: { effectiveFrom: 'asc' },
       });
     };

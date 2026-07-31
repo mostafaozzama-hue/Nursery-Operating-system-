@@ -6,5 +6,6 @@ import { SiblingDiscountTierService } from './sibling-discount-tier.service';
 @Module({
   controllers: [SiblingDiscountTierController],
   providers: [SiblingDiscountTierService, SiblingDiscountTierRepository],
+  exports: [SiblingDiscountTierService],
 })
 export class SiblingDiscountTierModule {}

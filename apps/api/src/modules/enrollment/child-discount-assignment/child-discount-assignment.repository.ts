@@ -168,6 +168,9 @@ export class ChildDiscountAssignmentRepository {
           effectiveFrom: { lte: periodEndValue },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: periodStartValue } }],
         },
+        // Added for PricingEngineService - Discount.type/scope/stackable
+        // aren't snapshotted onto the assignment, only its amount is.
+        include: { discount: true },
         orderBy: { effectiveFrom: 'asc' },
       });
     };

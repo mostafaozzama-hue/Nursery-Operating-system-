@@ -70,7 +70,9 @@ export class PlanFeeRepository {
       await findOrThrow('Plan', planId, () =>
         client.plan.findFirst({ where: { id: planId, tenantId, deletedAt: null } }),
       );
-      return client.planFee.findMany({ where: { tenantId, planId, deletedAt: null } });
+      // include: fee - added for PricingEngineService, which needs Fee.amount
+      // (mandatory PlanFees carry no snapshot) and Fee.name for the line's description.
+      return client.planFee.findMany({ where: { tenantId, planId, deletedAt: null }, include: { fee: true } });
     };
     return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
   }

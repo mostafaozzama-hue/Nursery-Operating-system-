@@ -77,6 +77,17 @@ export class EnrollmentBillingTermsService {
     return this.repository.findEffectiveForPeriod(tenantId, enrollmentId, periodStart, periodEnd, tx);
   }
 
+  /** Composable (optional tx) - PricingEngineService's entry point, since it only has a childId, not an enrollmentId. See the repository for why this can't just be findEffectiveForPeriod with an extra lookup. */
+  findEffectiveForChildAndPeriod(
+    tenantId: string,
+    childId: string,
+    periodStart: string,
+    periodEnd: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    return this.repository.findEffectiveForChildAndPeriod(tenantId, childId, periodStart, periodEnd, tx);
+  }
+
   /** Composable (optional tx) - the read SiblingDiscountTier resolution (a later service) depends on. */
   countEligibleSiblings(
     tenantId: string,
@@ -86,6 +97,17 @@ export class EnrollmentBillingTermsService {
     tx?: Prisma.TransactionClient,
   ) {
     return this.repository.countEligibleSiblings(tenantId, billingGuardianId, periodStart, periodEnd, tx);
+  }
+
+  /** Composable (optional tx) - returns the eligible sibling list itself, not just the count. Not yet consumed anywhere: PricingEngineService stops short of selecting which sibling(s) receive a SiblingDiscountTier reduction, a business rule the frozen documents don't define - see PricingEngineService for the full explanation. */
+  findEligibleSiblingsForPeriod(
+    tenantId: string,
+    billingGuardianId: string,
+    periodStart: string,
+    periodEnd: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    return this.repository.findEligibleSiblingsForPeriod(tenantId, billingGuardianId, periodStart, periodEnd, tx);
   }
 
   private translateConflict(error: unknown): never {

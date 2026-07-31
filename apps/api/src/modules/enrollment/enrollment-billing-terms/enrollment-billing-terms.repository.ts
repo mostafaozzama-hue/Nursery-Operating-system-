@@ -258,13 +258,46 @@ export class EnrollmentBillingTermsRepository {
       tx.enrollment.findFirst({ where: { id: enrollmentId, tenantId, deletedAt: null } }),
     );
 
+    return this.resolveEffectiveForChildAndPeriod(tx, tenantId, anchor.childId, periodStart, periodEnd);
+  }
+
+  /**
+   * Same period-overlap resolution as findEffectiveForPeriod, entered
+   * directly by childId - no enrollmentId anchor needed. Added for
+   * PricingEngineService, which only has a childId, not an enrollmentId.
+   * Returns null under the same conditions findEffectiveForPeriod already
+   * does (no Enrollment segment overlapping the period, or no billing terms
+   * row on that segment) - a plain nullable lookup, not a findOrThrow, since
+   * "no billing terms effective in this specific period" is a valid state
+   * (e.g. the period predates enrollment, or the child has since withdrawn),
+   * matching findEffectiveForPeriod's own already-frozen nullable signature.
+   */
+  findEffectiveForChildAndPeriod(
+    tenantId: string,
+    childId: string,
+    periodStart: string,
+    periodEnd: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const run = (client: Prisma.TransactionClient) =>
+      this.resolveEffectiveForChildAndPeriod(client, tenantId, childId, periodStart, periodEnd);
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
+  }
+
+  private async resolveEffectiveForChildAndPeriod(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    childId: string,
+    periodStart: string,
+    periodEnd: string,
+  ) {
     const periodStartDate = new Date(periodStart);
     const periodEndDate = new Date(periodEnd);
 
     const segment = await tx.enrollment.findFirst({
       where: {
         tenantId,
-        childId: anchor.childId,
+        childId,
         deletedAt: null,
         startDate: { lt: periodEndDate },
         OR: [{ endDate: null }, { endDate: { gt: periodStartDate } }],
@@ -275,7 +308,10 @@ export class EnrollmentBillingTermsRepository {
       return null;
     }
 
-    return tx.enrollmentBillingTerms.findFirst({ where: { tenantId, enrollmentId: segment.id } });
+    return tx.enrollmentBillingTerms.findFirst({
+      where: { tenantId, enrollmentId: segment.id },
+      include: { plan: true },
+    });
   }
 
   /** Counts distinct children under this billing guardian with an ACTIVE/SUSPENDED Enrollment overlapping the period - the read SiblingDiscountTier resolution (a later service) depends on. */
@@ -298,10 +334,39 @@ export class EnrollmentBillingTermsRepository {
     periodStart: string,
     periodEnd: string,
   ): Promise<number> {
+    const eligible = await this.resolveEligibleSiblingsList(tx, tenantId, billingGuardianId, periodStart, periodEnd);
+    return eligible.length;
+  }
+
+  /**
+   * Same eligibility query countEligibleSiblings already runs, returning the
+   * child rows instead of just a count - the sibling list a future
+   * per-child SiblingDiscountTier selection rule would need to rank, once
+   * one is defined (not implemented here - see PricingEngineService).
+   */
+  findEligibleSiblingsForPeriod(
+    tenantId: string,
+    billingGuardianId: string,
+    periodStart: string,
+    periodEnd: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const run = (client: Prisma.TransactionClient) =>
+      this.resolveEligibleSiblingsList(client, tenantId, billingGuardianId, periodStart, periodEnd);
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
+  }
+
+  private resolveEligibleSiblingsList(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    billingGuardianId: string,
+    periodStart: string,
+    periodEnd: string,
+  ) {
     const periodStartDate = new Date(periodStart);
     const periodEndDate = new Date(periodEnd);
 
-    const overlapping = await tx.enrollment.findMany({
+    return tx.enrollment.findMany({
       where: {
         tenantId,
         deletedAt: null,
@@ -313,8 +378,6 @@ export class EnrollmentBillingTermsRepository {
       select: { childId: true },
       distinct: ['childId'],
     });
-
-    return overlapping.length;
   }
 
   private async validateGuardianAndPlan(

@@ -6,5 +6,6 @@ import { ChildDiscountAssignmentService } from './child-discount-assignment.serv
 @Module({
   controllers: [ChildDiscountAssignmentController],
   providers: [ChildDiscountAssignmentService, ChildDiscountAssignmentRepository],
+  exports: [ChildDiscountAssignmentService],
 })
 export class ChildDiscountAssignmentModule {}

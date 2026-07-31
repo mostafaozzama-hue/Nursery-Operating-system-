@@ -18,6 +18,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { PlanModule } from './plan/plan.module';
 import { PlanFeeModule } from './plan-fee/plan-fee.module';
 import { PlanPriceModule } from './plan-price/plan-price.module';
+import { PricingEngineModule } from './pricing-engine/pricing-engine.module';
 import { SiblingDiscountTierModule } from './sibling-discount-tier/sibling-discount-tier.module';
 import { StaffModule } from './staff/staff.module';
 import { WaiverModule } from './waiver/waiver.module';
@@ -43,6 +44,7 @@ import { WaiverModule } from './waiver/waiver.module';
     SiblingDiscountTierModule,
     HolidayModule,
     WaiverModule,
+    PricingEngineModule,
   ],
 })
 export class EnrollmentModule {}

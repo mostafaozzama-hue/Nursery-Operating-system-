@@ -6,5 +6,6 @@ import { WaiverService } from './waiver.service';
 @Module({
   controllers: [WaiverController],
   providers: [WaiverService, WaiverRepository],
+  exports: [WaiverService],
 })
 export class WaiverModule {}
