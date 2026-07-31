@@ -11,7 +11,6 @@ import { InvoiceQueryDto } from './dto/invoice-query.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { LineItemQueryDto } from './dto/line-item-query.dto';
 import { PaymentQueryDto } from './dto/payment-query.dto';
-import { RecordPaymentDto } from './dto/record-payment.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { UpdateLineItemDto } from './dto/update-line-item.dto';
 import { InvoiceConflictError } from './invoice-conflict.error';
@@ -83,14 +82,6 @@ export class InvoiceService {
     return this.repository.issue(tenantId, invoiceId, dto, userId).catch((error) => this.translateError(error));
   }
 
-  recordPayment(invoiceId: string, dto: RecordPaymentDto) {
-    const tenantId = this.currentTenant.getTenantId();
-    const userId = this.currentUser.getUserId();
-    return this.repository
-      .recordPayment(tenantId, invoiceId, dto, userId)
-      .catch((error) => this.translateError(error));
-  }
-
   void(invoiceId: string) {
     const tenantId = this.currentTenant.getTenantId();
     const userId = this.currentUser.getUserId();
@@ -150,7 +141,20 @@ export class InvoiceService {
     const { items, total } = await this.repository
       .findPayments(tenantId, invoiceId, query)
       .catch((error) => this.translateError(error));
-    return buildPaginatedResult(items, total, query);
+    const mapped = items.map((allocation) => ({
+      id: allocation.id,
+      paymentId: allocation.paymentId,
+      amountApplied: allocation.amountApplied,
+      paymentMethod: allocation.payment.paymentMethod,
+      paidAt: allocation.payment.paidAt,
+      createdAt: allocation.payment.createdAt,
+    }));
+    return buildPaginatedResult(mapped, total, query);
+  }
+
+  /** Composable, never opens its own transaction - called only by PaymentAllocationService.allocate, once per invoice it just wrote a PaymentAllocation row against. */
+  recomputePaymentState(tx: Prisma.TransactionClient, tenantId: string, invoiceId: string, actorId: string) {
+    return this.repository.recomputePaymentState(tx, tenantId, invoiceId, actorId);
   }
 
   private translateError(error: unknown): never {

@@ -6,7 +6,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { LineItemDraft } from '../pricing-engine/line-item-draft.type';
 import { InvoiceConflictError } from './invoice-conflict.error';
-import { InvoiceSortField, InvoiceStatus } from './dto/invoice-query.dto';
+import { InvoiceSortField, InvoiceStatus, PAYABLE_STATUSES } from './dto/invoice-query.dto';
 import { LineItemSortField } from './dto/line-item-query.dto';
 import { PaymentSortField } from './dto/payment-query.dto';
 
@@ -64,14 +64,6 @@ interface UpdateLineItemData {
 interface IssueData {
   dueDate?: string;
 }
-
-interface RecordPaymentData {
-  amount: number;
-  paymentMethod: string;
-  paidAt?: string;
-}
-
-const PAYABLE_STATUSES = ['ISSUED', 'PARTIALLY_PAID'];
 
 @Injectable()
 export class InvoiceRepository {
@@ -477,49 +469,6 @@ export class InvoiceRepository {
     });
   }
 
-  recordPayment(tenantId: string, invoiceId: string, data: RecordPaymentData, actorId: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
-      if (!PAYABLE_STATUSES.includes(invoice.status)) {
-        throw new InvoiceConflictError('Payments can only be recorded against an issued invoice');
-      }
-
-      const amount = new Prisma.Decimal(data.amount);
-
-      const paidSoFarAgg = await tx.payment.aggregate({
-        where: { invoiceId, tenantId, deletedAt: null },
-        _sum: { amount: true },
-      });
-      const paidSoFar = paidSoFarAgg._sum.amount ?? new Prisma.Decimal(0);
-      const newTotal = paidSoFar.plus(amount);
-
-      if (newTotal.greaterThan(invoice.totalAmount)) {
-        throw new InvoiceConflictError('This payment would exceed the outstanding balance');
-      }
-
-      const payment = await tx.payment.create({
-        data: {
-          tenantId,
-          invoiceId,
-          // Configuration Engine, design only - Payment is now recorded
-          // against the billing party (Guardian) first; this direct
-          // per-invoice recording path derives it from the invoice being
-          // paid, since that's the only guardian in scope here.
-          guardianId: invoice.billedToGuardianId,
-          amount,
-          paymentMethod: data.paymentMethod,
-          paidAt: data.paidAt ? new Date(data.paidAt) : new Date(),
-          createdBy: actorId,
-        },
-      });
-
-      const status = newTotal.equals(invoice.totalAmount) ? 'PAID' : 'PARTIALLY_PAID';
-      await tx.invoice.update({ where: { id: invoiceId }, data: { status, updatedBy: actorId } });
-
-      return payment;
-    });
-  }
-
   void(tenantId: string, invoiceId: string, actorId: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
@@ -553,21 +502,30 @@ export class InvoiceRepository {
     });
   }
 
+  /**
+   * Payment is no longer 1:1 with Invoice (PaymentService/
+   * PaymentAllocationService own recording now) - this read-only view joins
+   * through PaymentAllocation instead of querying Payment directly, per
+   * §11's "becomes a read-only view joining through PaymentAllocation"
+   * note. amountApplied is this invoice's own portion of a payment that may
+   * span several invoices, not the payment's full amount.
+   */
   findPayments(tenantId: string, invoiceId: string, options: FindPaymentsOptions) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       await findOrThrow('Invoice', invoiceId, () =>
         tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }),
       );
 
-      const where: Prisma.PaymentWhereInput = { tenantId, invoiceId, deletedAt: null };
+      const where: Prisma.PaymentAllocationWhereInput = { tenantId, invoiceId, deletedAt: null };
       const [items, total] = await Promise.all([
-        tx.payment.findMany({
+        tx.paymentAllocation.findMany({
           where,
-          orderBy: { [options.sortBy]: options.sortOrder },
+          include: { payment: true },
+          orderBy: { payment: { [options.sortBy]: options.sortOrder } },
           skip: (options.page - 1) * options.pageSize,
           take: options.pageSize,
         }),
-        tx.payment.count({ where }),
+        tx.paymentAllocation.count({ where }),
       ]);
 
       return { items, total };
@@ -587,6 +545,34 @@ export class InvoiceRepository {
     });
     const totalAmount = agg._sum.totalAmount ?? new Prisma.Decimal(0);
     await tx.invoice.update({ where: { id: invoiceId }, data: { totalAmount, updatedBy: actorId } });
+  }
+
+  /**
+   * Composable, never opens its own transaction - called only by
+   * PaymentAllocationService.allocate, once per invoice it just wrote a
+   * PaymentAllocation row against. Recomputes Invoice payment status from
+   * the persisted PaymentAllocation rows themselves - the same
+   * recompute-from-the-live-rows idiom recomputeTotal already uses for
+   * totalAmount, applied to payment state instead. Deliberately takes no
+   * amount/delta parameter - always re-aggregates, never trusts a
+   * caller-supplied total, matching the "recompute via the single source
+   * of truth" discipline WaiverService.applyRetroactively's ISSUED branch
+   * already established this session. InvoiceService remains the sole
+   * owner of Invoice.status; PaymentAllocationService decides how much is
+   * applied and creates the PaymentAllocation row, but never writes to
+   * Invoice itself.
+   */
+  async recomputePaymentState(tx: Prisma.TransactionClient, tenantId: string, invoiceId: string, actorId: string) {
+    const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
+
+    const agg = await tx.paymentAllocation.aggregate({
+      where: { invoiceId, tenantId, deletedAt: null },
+      _sum: { amountApplied: true },
+    });
+    const totalApplied = agg._sum.amountApplied ?? new Prisma.Decimal(0);
+
+    const status = totalApplied.greaterThanOrEqualTo(invoice.totalAmount) ? 'PAID' : 'PARTIALLY_PAID';
+    return tx.invoice.update({ where: { id: invoiceId }, data: { status, updatedBy: actorId } });
   }
 
   /**

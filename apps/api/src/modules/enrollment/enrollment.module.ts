@@ -18,6 +18,8 @@ import { HolidayModule } from './holiday/holiday.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { ManualOverrideModule } from './manual-override/manual-override.module';
 import { OneTimeChargeModule } from './one-time-charge/one-time-charge.module';
+import { PaymentModule } from './payment/payment.module';
+import { PaymentAllocationModule } from './payment-allocation/payment-allocation.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { PlanModule } from './plan/plan.module';
 import { PlanFeeModule } from './plan-fee/plan-fee.module';
@@ -53,6 +55,8 @@ import { WaiverModule } from './waiver/waiver.module';
     ManualOverrideModule,
     OneTimeChargeModule,
     CreditNoteModule,
+    PaymentAllocationModule,
+    PaymentModule,
   ],
 })
 export class EnrollmentModule {}

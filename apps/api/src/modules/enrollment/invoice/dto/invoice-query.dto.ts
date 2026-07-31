@@ -10,6 +10,15 @@ export type InvoiceSortField = (typeof INVOICE_SORT_FIELDS)[number];
 export const INVOICE_STATUSES = ['DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'PAID', 'VOID', 'OVERDUE'] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
+// The subset of INVOICE_STATUSES an invoice can still receive payment
+// against - shared here (not exported from invoice.repository.ts) so
+// PaymentAllocationRepository can reuse the same vocabulary without
+// depending on another module's repository internals. Deliberately not
+// `as const` - used only against the plain `string`-typed Invoice.status
+// field (Prisma.InvoiceWhereInput's `in` filter, Array.includes), never as
+// a derived literal-union type the way INVOICE_STATUSES/InvoiceStatus is.
+export const PAYABLE_STATUSES = ['ISSUED', 'PARTIALLY_PAID'];
+
 export class InvoiceQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

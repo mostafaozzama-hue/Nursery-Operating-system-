@@ -9,8 +9,8 @@ import { OneTimeChargeService } from './one-time-charge.service';
 /**
  * Only route this service has (§4's interface has only add()) - reads go
  * through the existing GET /invoices/:invoiceId/line-items, unchanged.
- * OWNER/ADMIN/STAFF, confirmed against InvoiceController.recordPayment's
- * identical role set, not just §9's prose ("LATE_PICKUP is plausibly a
+ * OWNER/ADMIN/STAFF, matching PaymentController's identical role set for
+ * recording a Payment - §9's own prose ("LATE_PICKUP is plausibly a
  * front-desk action, matching Payment's tier").
  */
 @ApiTags('one-time-charges')
