@@ -508,9 +508,13 @@ model InvoiceLineItem {
   invoice   Invoice    @relation(fields: [invoiceId], references: [id])
   planPrice PlanPrice? @relation(fields: [planPriceId], references: [id])
 
-  // CHECK invoice_line_items_quantity_positive (quantity > 0) and
-  // invoice_line_items_amounts_non_negative (unit_amount >= 0 AND
-  // total_amount >= 0) live in migration add_billing_constraints.
+  // CHECK invoice_line_items_quantity_positive (quantity > 0) lives in
+  // migration add_billing_constraints. invoice_line_items_amounts_non_negative
+  // (the original, unconditional unit_amount/total_amount >= 0 check) was
+  // replaced in migration 20260731090000_fix_invoice_line_item_sign_constraint
+  // by invoice_line_items_amounts_valid_by_source_type - DISCOUNT/WAIVER-sourced
+  // lines must be <= 0 (a negative reduction, per domain-model.md), every other
+  // sourceType (including the nullable legacy case) keeps the original >= 0.
   @@index([tenantId])
   @@index([invoiceId])
   @@index([planPriceId])
