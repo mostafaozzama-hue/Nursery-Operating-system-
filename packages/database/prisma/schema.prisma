@@ -457,6 +457,13 @@ model Invoice {
   // rows in migration 20260728130000_backfill_invoice_and_payment_data - see
   // docs/architecture/domain-model.md.
   invoiceNumber      String    @map("invoice_number")
+  // Configuration Engine, design only - nullable: manually-created invoices
+  // (already-shipped, and any future ad-hoc InvoiceService.create call)
+  // have no run to point to. Resolves the gap where Invoice previously had
+  // no linkage to a billing period or BillingRun at all - see migration
+  // 20260731100000_add_invoice_billing_run_link and
+  // docs/SESSION_CHECKPOINT.md for the full verification trail.
+  billingRunId       String?   @map("billing_run_id") @db.Uuid
   createdBy          String?   @map("created_by") @db.Uuid
   updatedBy          String?   @map("updated_by") @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at")
@@ -474,13 +481,19 @@ model Invoice {
   paymentAllocations   PaymentAllocation[]
   creditNotes          CreditNote[]        @relation("CreditNoteOriginalInvoice")
   creditNotesAppliedTo CreditNote[]        @relation("CreditNoteAppliedToInvoice")
+  billingRun           BillingRun?         @relation(fields: [billingRunId], references: [id])
 
   // CHECK invoices_total_amount_non_negative (total_amount >= 0) lives in
   // migration add_billing_constraints - not expressible in Prisma DSL.
+  // Partial unique index invoices_billing_run_child_unique (billing_run_id,
+  // child_id, WHERE deleted_at IS NULL) - at most one invoice per child per
+  // billing run - lives in migration 20260731100000_add_invoice_billing_run_link,
+  // not expressible in Prisma DSL.
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
   @@index([childId])
   @@index([billedToGuardianId])
+  @@index([billingRunId])
   @@map("invoices")
 }
 
@@ -894,7 +907,8 @@ model BillingRun {
   deletedAt   DateTime? @map("deleted_at")
   deletedBy   String?   @map("deleted_by") @db.Uuid
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  invoices Invoice[]
 
   @@unique([tenantId, periodStart, periodEnd])
   @@index([tenantId])
