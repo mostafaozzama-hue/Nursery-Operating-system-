@@ -104,6 +104,37 @@ export class EnrollmentBillingTermsRepository {
     );
   }
 
+  /** Plain nullable lookup, not findOrThrow - lets EnrollmentBillingTermsService decide the create-vs-change business flow itself, rather than this repository branching on the result. */
+  findCurrentOrNull(tenantId: string, enrollmentId: string) {
+    return withTenantContext(this.prisma, tenantId, (tx) =>
+      tx.enrollmentBillingTerms.findFirst({ where: { tenantId, enrollmentId, deletedAt: null } }),
+    );
+  }
+
+  /**
+   * Controller-facing counterpart to openWithEnrollment, for an Enrollment
+   * that's already open but never got billing terms at creation time
+   * (OpenBillingTermsDto's own "opt-in, not mandatory"). Opens its own
+   * transaction, checks the target Enrollment is still open (same guard
+   * changeTerms already has), then delegates the actual insert to
+   * openWithEnrollment - the same primitive EnrollmentRepository.create/
+   * transfer already use inside their own transactions - rather than
+   * duplicating the creation logic here. Only ever called from the
+   * "no current terms" branch EnrollmentBillingTermsService.changeTerms
+   * decides on - the business decision lives there, this stays persistence.
+   */
+  async createInitial(tenantId: string, enrollmentId: string, data: TermsData, createdBy: string) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      const enrollment = await findOrThrow('Enrollment', enrollmentId, () =>
+        tx.enrollment.findFirst({ where: { id: enrollmentId, tenantId, deletedAt: null } }),
+      );
+      if (enrollment.endDate !== null) {
+        throw new EnrollmentBillingTermsConflictError('Enrollment already closed');
+      }
+      return this.openWithEnrollment(tx, tenantId, enrollmentId, data, createdBy, true);
+    });
+  }
+
   changeTerms(tenantId: string, enrollmentId: string, data: ChangeTermsData, actorId: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const currentTerms = await findOrThrow('EnrollmentBillingTerms', enrollmentId, () =>

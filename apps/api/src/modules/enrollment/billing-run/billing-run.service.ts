@@ -5,7 +5,11 @@ import { translateNotFound } from '../../../common/errors/translate-not-found';
 import { buildPaginatedResult } from '../../../common/pagination/pagination.util';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
-import { EnrollmentBillingTermsService } from '../enrollment-billing-terms/enrollment-billing-terms.service';
+// EnrollmentBillingTermsRepository, not the request-scoped Service - only
+// findChildrenWithEffectiveTermsForPeriod is used here (explicit tenantId,
+// no CurrentTenantProvider/CurrentUserProvider needed) - see
+// EnrollmentRepository's identical comment for the root cause.
+import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { InvoiceService } from '../invoice/invoice.service';
 import { PricingEngineService } from '../pricing-engine/pricing-engine.service';
 import { BillingRunConflictError } from './billing-run-conflict.error';
@@ -19,7 +23,7 @@ const OPEN_INVOICE_STATUS = 'DRAFT';
 export class BillingRunService {
   constructor(
     private readonly repository: BillingRunRepository,
-    private readonly billingTerms: EnrollmentBillingTermsService,
+    private readonly billingTerms: EnrollmentBillingTermsRepository,
     private readonly pricingEngine: PricingEngineService,
     private readonly invoice: InvoiceService,
     private readonly currentTenant: CurrentTenantProvider,

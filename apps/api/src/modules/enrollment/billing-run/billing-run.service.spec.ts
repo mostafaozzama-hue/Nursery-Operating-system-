@@ -2,7 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EntityNotFoundError } from '../../../common/errors/entity-not-found.error';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
-import { EnrollmentBillingTermsService } from '../enrollment-billing-terms/enrollment-billing-terms.service';
+import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { InvoiceService } from '../invoice/invoice.service';
 import { PricingEngineService } from '../pricing-engine/pricing-engine.service';
 import { BillingRunConflictError } from './billing-run-conflict.error';
@@ -11,7 +11,7 @@ import { BillingRunService } from './billing-run.service';
 
 describe('BillingRunService', () => {
   let repository: jest.Mocked<BillingRunRepository>;
-  let billingTerms: jest.Mocked<EnrollmentBillingTermsService>;
+  let billingTerms: jest.Mocked<EnrollmentBillingTermsRepository>;
   let pricingEngine: jest.Mocked<PricingEngineService>;
   let invoice: jest.Mocked<InvoiceService>;
   let currentTenant: jest.Mocked<CurrentTenantProvider>;
@@ -32,7 +32,7 @@ describe('BillingRunService', () => {
 
     billingTerms = {
       findChildrenWithEffectiveTermsForPeriod: jest.fn().mockResolvedValue([{ childId: 'child-1' }]),
-    } as unknown as jest.Mocked<EnrollmentBillingTermsService>;
+    } as unknown as jest.Mocked<EnrollmentBillingTermsRepository>;
 
     pricingEngine = {
       computeChargesForPeriod: jest.fn().mockResolvedValue({ billedToGuardianId: 'guardian-1', drafts: [] }),

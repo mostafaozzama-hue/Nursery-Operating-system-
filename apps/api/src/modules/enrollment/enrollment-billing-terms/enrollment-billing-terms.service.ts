@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
 import { isUniqueConstraintViolation } from '../../../common/errors/is-unique-constraint-violation';
 import { translateNotFound } from '../../../common/errors/translate-not-found';
@@ -55,8 +55,41 @@ export class EnrollmentBillingTermsService {
     return this.repository.findCurrent(tenantId, enrollmentId).catch(translateNotFound);
   }
 
-  changeTerms(enrollmentId: string, dto: ChangeBillingTermsDto) {
+  /**
+   * Explicit business-flow dispatch, kept visible at this layer rather than
+   * hidden inside the repository: an Enrollment with no current billing
+   * terms yet (skipped at enrollment creation - OpenBillingTermsDto's own
+   * "opt-in, not mandatory") gets them created for the first time; an
+   * Enrollment that already has terms gets them historized-changed, the
+   * existing behavior. Same controller method name/signature either way -
+   * PATCH .../billing-terms doesn't change.
+   */
+  async changeTerms(enrollmentId: string, dto: ChangeBillingTermsDto) {
     const tenantId = this.currentTenant.getTenantId();
+    const currentTerms = await this.repository.findCurrentOrNull(tenantId, enrollmentId);
+
+    if (currentTerms === null) {
+      return this.createInitialBillingTerms(tenantId, enrollmentId, dto);
+    }
+    return this.changeExistingBillingTerms(tenantId, enrollmentId, dto);
+  }
+
+  /** Create initial billing terms - the "no current terms" business flow. */
+  private createInitialBillingTerms(tenantId: string, enrollmentId: string, dto: ChangeBillingTermsDto) {
+    const billingGuardianId = dto.billingGuardianId;
+    if (!billingGuardianId) {
+      throw new BadRequestException(
+        'billingGuardianId is required when setting billing terms for the first time',
+      );
+    }
+    const userId = this.currentUser.getUserId();
+    return this.repository
+      .createInitial(tenantId, enrollmentId, { ...dto, billingGuardianId }, userId)
+      .catch((error) => this.translateConflict(error));
+  }
+
+  /** Change existing billing terms - the "current terms already exist" business flow. Unchanged behavior. */
+  private changeExistingBillingTerms(tenantId: string, enrollmentId: string, dto: ChangeBillingTermsDto) {
     const userId = this.currentUser.getUserId();
     return this.repository.changeTerms(tenantId, enrollmentId, dto, userId).catch((error) => {
       if (isUniqueConstraintViolation(error)) {

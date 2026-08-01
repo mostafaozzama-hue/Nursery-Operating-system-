@@ -3,7 +3,13 @@ import { Prisma } from '@nursery-os/database';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CapacityService } from '../capacity/capacity.service';
-import { EnrollmentBillingTermsService } from '../enrollment-billing-terms/enrollment-billing-terms.service';
+// EnrollmentBillingTermsRepository, not the request-scoped Service - only
+// openWithEnrollment/closeWithEnrollment are used here (explicit tenantId,
+// no CurrentTenantProvider/CurrentUserProvider needed), and injecting the
+// request-scoped Service into this cross-module singleton repository broke
+// EnrollmentBillingTermsController's own request-scope resolution (root
+// cause confirmed experimentally - see docs/SESSION_CHECKPOINT.md).
+import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { EnrollmentConflictError } from './enrollment-conflict.error';
 import { EnrollmentSortField, EnrollmentStatus } from './dto/enrollment-query.dto';
@@ -54,7 +60,7 @@ export class EnrollmentRepository {
   constructor(
     private readonly prisma: PrismaService,
     private readonly capacity: CapacityService,
-    private readonly billingTerms: EnrollmentBillingTermsService,
+    private readonly billingTerms: EnrollmentBillingTermsRepository,
   ) {}
 
   create(tenantId: string, data: CreateData, createdBy: string) {

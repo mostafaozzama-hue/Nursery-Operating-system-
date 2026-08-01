@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
 import { EntityNotFoundError } from '../../../common/errors/entity-not-found.error';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
@@ -19,6 +19,8 @@ describe('EnrollmentBillingTermsService', () => {
       openWithEnrollment: jest.fn(),
       closeWithEnrollment: jest.fn(),
       findCurrent: jest.fn(),
+      findCurrentOrNull: jest.fn(),
+      createInitial: jest.fn(),
       changeTerms: jest.fn(),
       findEffectiveForPeriod: jest.fn(),
       countEligibleSiblings: jest.fn(),
@@ -89,7 +91,22 @@ describe('EnrollmentBillingTermsService', () => {
     });
   });
 
-  describe('changeTerms', () => {
+  describe('changeTerms - business-flow dispatch', () => {
+    it('checks findCurrentOrNull first, before deciding which flow to run', async () => {
+      repository.findCurrentOrNull.mockResolvedValue({ id: 'existing-terms' } as never);
+      repository.changeTerms.mockResolvedValue({ id: 'terms-2' } as never);
+
+      await service.changeTerms('enrollment-1', { effectiveFrom: '2026-09-01' } as never);
+
+      expect(repository.findCurrentOrNull).toHaveBeenCalledWith('tenant-1', 'enrollment-1');
+    });
+  });
+
+  describe('changeTerms - change existing billing terms (findCurrentOrNull resolves non-null)', () => {
+    beforeEach(() => {
+      repository.findCurrentOrNull.mockResolvedValue({ id: 'existing-terms' } as never);
+    });
+
     it('passes the resolved tenant, dto, and user to the repository', async () => {
       const dto = { effectiveFrom: '2026-09-01' } as never;
       repository.changeTerms.mockResolvedValue({ id: 'terms-2' } as never);
@@ -97,6 +114,7 @@ describe('EnrollmentBillingTermsService', () => {
       const result = await service.changeTerms('enrollment-1', dto);
 
       expect(repository.changeTerms).toHaveBeenCalledWith('tenant-1', 'enrollment-1', dto, 'user-1');
+      expect(repository.createInitial).not.toHaveBeenCalled();
       expect(result).toEqual({ id: 'terms-2' });
     });
 
@@ -107,19 +125,63 @@ describe('EnrollmentBillingTermsService', () => {
           clientVersion: '5.22.0',
         }),
       );
-      await expect(service.changeTerms('enrollment-1', {} as never)).rejects.toThrow(ConflictException);
+      await expect(
+        service.changeTerms('enrollment-1', { effectiveFrom: '2026-09-01' } as never),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('translates an EnrollmentBillingTermsConflictError into a 409', async () => {
       repository.changeTerms.mockRejectedValue(
         new EnrollmentBillingTermsConflictError('A standard billing-terms change must be dated in the future'),
       );
-      await expect(service.changeTerms('enrollment-1', {} as never)).rejects.toThrow(ConflictException);
+      await expect(
+        service.changeTerms('enrollment-1', { effectiveFrom: '2026-09-01' } as never),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('translates a not-found enrollment/guardian/plan into a 404', async () => {
       repository.changeTerms.mockRejectedValue(new EntityNotFoundError('Plan', 'plan-x'));
-      await expect(service.changeTerms('enrollment-1', {} as never)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.changeTerms('enrollment-1', { effectiveFrom: '2026-09-01' } as never),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('changeTerms - create initial billing terms (findCurrentOrNull resolves null)', () => {
+    beforeEach(() => {
+      repository.findCurrentOrNull.mockResolvedValue(null);
+    });
+
+    it('calls repository.createInitial, not repository.changeTerms, with the resolved tenant/enrollment/user', async () => {
+      const dto = { effectiveFrom: '2026-09-01', billingGuardianId: 'guardian-1' } as never;
+      repository.createInitial.mockResolvedValue({ id: 'terms-1' } as never);
+
+      const result = await service.changeTerms('enrollment-1', dto);
+
+      expect(repository.createInitial).toHaveBeenCalledWith('tenant-1', 'enrollment-1', dto, 'user-1');
+      expect(repository.changeTerms).not.toHaveBeenCalled();
+      expect(result).toEqual({ id: 'terms-1' });
+    });
+
+    it('throws BadRequestException when billingGuardianId is missing, without calling the repository', async () => {
+      const dto = { effectiveFrom: '2026-09-01' } as never;
+
+      await expect(service.changeTerms('enrollment-1', dto)).rejects.toThrow(BadRequestException);
+      expect(repository.createInitial).not.toHaveBeenCalled();
+    });
+
+    it('translates an EnrollmentBillingTermsConflictError (e.g. enrollment already closed) into a 409', async () => {
+      repository.createInitial.mockRejectedValue(new EnrollmentBillingTermsConflictError('Enrollment already closed'));
+      const dto = { effectiveFrom: '2026-09-01', billingGuardianId: 'guardian-1' } as never;
+
+      await expect(service.changeTerms('enrollment-1', dto)).rejects.toThrow(ConflictException);
+    });
+
+    it('translates a not-found guardian/plan into a 404', async () => {
+      repository.createInitial.mockRejectedValue(new EntityNotFoundError('Guardian', 'guardian-x'));
+      const dto = { effectiveFrom: '2026-09-01', billingGuardianId: 'guardian-x' } as never;
+
+      await expect(service.changeTerms('enrollment-1', dto)).rejects.toThrow(NotFoundException);
     });
   });
 

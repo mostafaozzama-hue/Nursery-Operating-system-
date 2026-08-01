@@ -2,7 +2,7 @@ import { Prisma } from '@nursery-os/database';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ChildDiscountAssignmentService } from '../child-discount-assignment/child-discount-assignment.service';
 import { ChildFeeAssignmentService } from '../child-fee-assignment/child-fee-assignment.service';
-import { EnrollmentBillingTermsService } from '../enrollment-billing-terms/enrollment-billing-terms.service';
+import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { PlanFeeService } from '../plan-fee/plan-fee.service';
 import { PlanPriceService } from '../plan-price/plan-price.service';
 import { SiblingDiscountTierService } from '../sibling-discount-tier/sibling-discount-tier.service';
@@ -13,7 +13,7 @@ const D = (value: number) => new Prisma.Decimal(value);
 describe('PricingEngineService', () => {
   let prisma: jest.Mocked<PrismaService>;
   let waiverFindMany: jest.Mock;
-  let billingTerms: jest.Mocked<EnrollmentBillingTermsService>;
+  let billingTerms: jest.Mocked<EnrollmentBillingTermsRepository>;
   let planPrice: jest.Mocked<PlanPriceService>;
   let planFee: jest.Mocked<PlanFeeService>;
   let childFeeAssignment: jest.Mocked<ChildFeeAssignmentService>;
@@ -33,7 +33,7 @@ describe('PricingEngineService', () => {
     billingTerms = {
       findEffectiveForChildAndPeriod: jest.fn().mockResolvedValue(baseTerms),
       countEligibleSiblings: jest.fn().mockResolvedValue(1),
-    } as unknown as jest.Mocked<EnrollmentBillingTermsService>;
+    } as unknown as jest.Mocked<EnrollmentBillingTermsRepository>;
 
     planPrice = {
       findEffective: jest.fn().mockResolvedValue({ id: 'price-1', amount: D(1000) }),

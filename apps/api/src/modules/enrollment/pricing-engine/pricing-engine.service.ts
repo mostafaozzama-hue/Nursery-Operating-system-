@@ -4,7 +4,11 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { ChildDiscountAssignmentService } from '../child-discount-assignment/child-discount-assignment.service';
 import { ChildFeeAssignmentService } from '../child-fee-assignment/child-fee-assignment.service';
-import { EnrollmentBillingTermsService } from '../enrollment-billing-terms/enrollment-billing-terms.service';
+// EnrollmentBillingTermsRepository, not the request-scoped Service - only
+// findEffectiveForChildAndPeriod/countEligibleSiblings are used here
+// (explicit tenantId, no CurrentTenantProvider/CurrentUserProvider needed) -
+// see EnrollmentRepository's identical comment for the root cause.
+import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { PlanFeeService } from '../plan-fee/plan-fee.service';
 import { PlanPriceService } from '../plan-price/plan-price.service';
 import { SiblingDiscountTierService } from '../sibling-discount-tier/sibling-discount-tier.service';
@@ -17,7 +21,7 @@ const HUNDRED = new Prisma.Decimal(100);
 export class PricingEngineService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly billingTerms: EnrollmentBillingTermsService,
+    private readonly billingTerms: EnrollmentBillingTermsRepository,
     private readonly planPrice: PlanPriceService,
     private readonly planFee: PlanFeeService,
     private readonly childFeeAssignment: ChildFeeAssignmentService,
