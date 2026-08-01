@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useClassroomDirectory } from '@/lib/classrooms/queries';
 import { enrollmentStatusLabel, formatEnrollmentDate } from '@/lib/enrollments/mapper';
 import { useChildEnrollments } from '@/lib/enrollments/queries';
+import { BillingTermsSection } from './billing-terms-section';
 
 /**
  * Single component owning both the "current status" summary and the full
@@ -116,6 +117,8 @@ export function EnrollmentSection({ childId }: { childId: string }) {
           />
         </>
       )}
+
+      {canManage && current && <BillingTermsSection enrollmentId={current.id} childId={childId} />}
     </div>
   );
 }

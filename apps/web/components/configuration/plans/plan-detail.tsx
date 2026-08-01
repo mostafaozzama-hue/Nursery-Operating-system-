@@ -15,6 +15,7 @@ import {
   formatScheduleWindow,
 } from '@/lib/plans/mapper';
 import { usePlan } from '@/lib/plans/queries';
+import { PlanFeesSection } from './plan-fees-section';
 import { PlanPricesSection } from './plan-prices-section';
 
 export function PlanDetail({ planId }: { planId: string }) {
@@ -111,6 +112,7 @@ export function PlanDetail({ planId }: { planId: string }) {
       />
 
       <PlanPricesSection planId={planId} />
+      <PlanFeesSection planId={planId} />
     </div>
   );
 }

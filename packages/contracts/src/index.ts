@@ -15,3 +15,5 @@ export * from './payments/types';
 export * from './plans/types';
 export * from './fees/types';
 export * from './plan-prices/types';
+export * from './plan-fees/types';
+export * from './enrollment-billing-terms/types';

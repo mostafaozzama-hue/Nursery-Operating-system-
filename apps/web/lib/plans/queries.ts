@@ -242,3 +242,42 @@ export function usePlanSummary(): PlanSummaryResult {
 
   return { total, activeCount, isLoading, error };
 }
+
+export interface PlanDirectoryResult {
+  plans: Plan[];
+  isLoading: boolean;
+  error: unknown;
+  refetch: () => void;
+}
+
+/** Flat, non-paginated fetch for picker use (Enrollment Billing Terms' Plan selection) - mirrors useFeeDirectory/useClassroomDirectory exactly. Active-only here is not just a UX nicety: EnrollmentBillingTermsService.validatePlanActive rejects an inactive Plan server-side, so this filter avoids a predictable 409. */
+export function usePlanDirectory(): PlanDirectoryResult {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    api.plans
+      .list({ page: 1, pageSize: 100, isActive: true, sortBy: 'name', sortOrder: 'asc' })
+      .then((result) => {
+        if (!cancelled) setPlans(result.data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  return { plans, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
+}

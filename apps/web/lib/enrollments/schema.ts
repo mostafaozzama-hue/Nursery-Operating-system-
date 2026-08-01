@@ -5,6 +5,10 @@ import type {
   WithdrawEnrollmentRequest,
 } from '@nursery-os/contracts';
 import { z } from 'zod';
+import {
+  toOpenBillingTermsRequest,
+  type OpenBillingTermsFormValues,
+} from '@/lib/enrollment-billing-terms/schema';
 
 /**
  * Enroll, transfer, withdraw, and reason-correction all take the exact same
@@ -25,15 +29,18 @@ export const transferFormSchema = reasonSchema;
 export const withdrawFormSchema = reasonSchema;
 export const editReasonFormSchema = reasonSchema;
 
+/** billingTerms is omitted entirely (not just left with empty fields) when the Enroll form's billing-terms disclosure was never opened - matches OpenBillingTermsDto's "opt-in, not mandatory" contract exactly. */
 export function toCreateEnrollmentRequest(
   childId: string,
   classroomId: string | null,
   values: ReasonFormValues,
+  billingTerms?: OpenBillingTermsFormValues,
 ): CreateEnrollmentRequest {
   return {
     childId,
     classroomId: classroomId ?? undefined,
     createdReason: values.reason.trim() || undefined,
+    billingTerms: billingTerms ? toOpenBillingTermsRequest(billingTerms) : undefined,
   };
 }
 

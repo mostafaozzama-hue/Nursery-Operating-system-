@@ -249,3 +249,42 @@ export function useFeeSummary(): FeeSummaryResult {
 
   return { total, activeCount, isLoading, error };
 }
+
+export interface FeeDirectoryResult {
+  fees: Fee[];
+  isLoading: boolean;
+  error: unknown;
+  refetch: () => void;
+}
+
+/** Flat, non-paginated fetch for picker use (e.g. attaching a Fee to a Plan) - mirrors useClassroomDirectory's shape exactly. Active-only: the picker itself is the frontend's own decision not to offer inactive fees for new use, the backend doesn't require it. */
+export function useFeeDirectory(): FeeDirectoryResult {
+  const [fees, setFees] = useState<Fee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    api.fees
+      .list({ page: 1, pageSize: 100, isActive: true, sortBy: 'name', sortOrder: 'asc' })
+      .then((result) => {
+        if (!cancelled) setFees(result.data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  return { fees, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
+}

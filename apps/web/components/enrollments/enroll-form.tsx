@@ -7,6 +7,11 @@ import { ClassroomPicker } from '@/components/classrooms/classroom-picker';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
+import {
+  emptyOpenBillingTermsFormValues,
+  openBillingTermsFormSchema,
+  type OpenBillingTermsFormValues,
+} from '@/lib/enrollment-billing-terms/schema';
 import { useCreateEnrollment } from '@/lib/enrollments/mutations';
 import {
   emptyReasonFormValues,
@@ -15,6 +20,7 @@ import {
   type ReasonFormValues,
 } from '@/lib/enrollments/schema';
 import { cn } from '@/lib/utils';
+import { BillingTermsFields } from './billing-terms-fields';
 
 export function EnrollForm({ childId }: { childId: string }) {
   const router = useRouter();
@@ -26,6 +32,14 @@ export function EnrollForm({ childId }: { childId: string }) {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ReasonFormValues, string>>>(
     {},
   );
+
+  const [showBillingTerms, setShowBillingTerms] = useState(false);
+  const [billingTermsValues, setBillingTermsValues] = useState<OpenBillingTermsFormValues>(
+    emptyOpenBillingTermsFormValues,
+  );
+  const [billingTermsFieldErrors, setBillingTermsFieldErrors] = useState<
+    Partial<Record<keyof OpenBillingTermsFormValues, string>>
+  >({});
 
   const proceedWithClassroom = (classroom: Classroom) => {
     setSelectedClassroom(classroom);
@@ -48,11 +62,31 @@ export function EnrollForm({ childId }: { childId: string }) {
       setFieldErrors(errors);
       return;
     }
+
+    if (showBillingTerms) {
+      const billingResult = openBillingTermsFormSchema.safeParse(billingTermsValues);
+      if (!billingResult.success) {
+        const errors: Partial<Record<keyof OpenBillingTermsFormValues, string>> = {};
+        for (const issue of billingResult.error.issues) {
+          errors[issue.path[0] as keyof OpenBillingTermsFormValues] = issue.message;
+        }
+        setFieldErrors({});
+        setBillingTermsFieldErrors(errors);
+        return;
+      }
+    }
+
     setFieldErrors({});
+    setBillingTermsFieldErrors({});
 
     try {
       await createEnrollment(
-        toCreateEnrollmentRequest(childId, selectedClassroom?.id ?? null, result.data),
+        toCreateEnrollmentRequest(
+          childId,
+          selectedClassroom?.id ?? null,
+          result.data,
+          showBillingTerms ? billingTermsValues : undefined,
+        ),
       );
       router.push(`/dashboard/children/${childId}`);
     } catch {
@@ -97,6 +131,25 @@ export function EnrollForm({ childId }: { childId: string }) {
         />
         {fieldErrors.reason && <p className="text-sm text-destructive">{fieldErrors.reason}</p>}
       </div>
+
+      {!showBillingTerms ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit"
+          onClick={() => setShowBillingTerms(true)}
+        >
+          More options (billing terms)
+        </Button>
+      ) : (
+        <BillingTermsFields
+          childId={childId}
+          values={billingTermsValues}
+          onChange={(partial) => setBillingTermsValues((prev) => ({ ...prev, ...partial }))}
+          fieldErrors={billingTermsFieldErrors}
+        />
+      )}
 
       {submitError != null && (
         <p className="text-sm text-destructive">

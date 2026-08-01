@@ -1,4 +1,5 @@
 import type { PaginationQuery } from '../common/pagination';
+import type { OpenBillingTermsRequest } from '../enrollment-billing-terms/types';
 
 export const ENROLLMENT_STATUSES = ['WAITLISTED', 'ACTIVE', 'WITHDRAWN'] as const;
 export type EnrollmentStatus = (typeof ENROLLMENT_STATUSES)[number];
@@ -30,6 +31,7 @@ export interface CreateEnrollmentRequest {
   childId: string;
   classroomId?: string;
   createdReason?: string;
+  billingTerms?: OpenBillingTermsRequest;
 }
 
 export interface TransferEnrollmentRequest {
