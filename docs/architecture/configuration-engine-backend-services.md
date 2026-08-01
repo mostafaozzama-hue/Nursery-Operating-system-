@@ -1,6 +1,6 @@
 # Configuration Engine — Backend Services Design
 
-- **Status:** Design only, not implemented. No code exists yet for anything named in this document. Revised 2026-07-29 following an architecture review — see §14 for what changed and why.
+- **Status:** Design frozen. **Core backend implementation complete** — every service in this document with a named caller has been built, reviewed, and committed. See [roadmap.md](./roadmap.md) for current milestone status and `docs/SESSION_CHECKPOINT.md` for the full round-by-round implementation history. A small number of interface methods remain deliberately unbuilt, each blocked on either a product decision or the absence of any caller yet — see `SESSION_CHECKPOINT.md` — not missing engineering work. Revised 2026-07-29 following an architecture review — see §14 for what changed and why.
 - **Date:** 2026-07-29 (original) · 2026-07-29 (architecture-review revision)
 - **Builds on:** [domain-model.md](./domain-model.md) (Configuration Engine extension, approved design), [ADR-0017](./adrs/0017-configuration-before-operations.md)
 - **Does not modify:** the domain model or `packages/database/prisma/schema.prisma`, both frozen inputs to this document. Every service, method, and dependency below maps onto an entity, field, or business rule already approved in those two documents. Nothing here proposes a new table, a new field, or a new business capability.

@@ -1,6 +1,6 @@
 # Domain Model: Enrollment, Staffing, Attendance, Billing
 
-- **Status:** Mixed — see below. Originally approved 2026-07-19 and since implemented; extended 2026-07-27 with the Configuration Engine, approved design only.
+- **Status:** Mixed — see below. Originally approved 2026-07-19 and since implemented; extended 2026-07-27 with the Configuration Engine, approved with implementation complete for all currently planned services.
 - **Date:** 2026-07-19 (original) · 2026-07-27 (Configuration Engine extension)
 - **Extends:** [ADR-0001: Core Platform Architecture](../adr/0001-core-platform-architecture.md)
 - **Related (Configuration Engine extension):** [ADR-0012](./adrs/0012-enrollment-historized-not-mutable-status.md), [ADR-0017](./adrs/0017-configuration-before-operations.md)
@@ -13,7 +13,7 @@ it.
 
 **Build status of the two halves of this document, stated plainly so neither is mistaken for the other:**
 - **Original model** (`Classroom`, `Child`, `Enrollment`, `Guardian`, `ChildGuardian`, `Staff`, `StaffPayroll`, `Attendance`, `Invoice`, `InvoiceLineItem`, `Payment`) — **implemented and shipped.** The "not yet implemented" status this document originally carried is stale for this half; these tables exist in `schema.prisma` today.
-- **Configuration Engine extension** (`Plan`, `PlanPrice`, `Fee`, `PlanFee`, `ChildFeeAssignment`, `Discount`, `ChildDiscountAssignment`, `SiblingDiscountTier`, `Waiver`, `Holiday`, `BillingRun`, `PaymentAllocation`, `ManualOverride`, plus modifications to `Enrollment`, `InvoiceLineItem`, `Payment`, `Tenant`) — **approved design only, not implemented.** This formalizes the business rules from the Configuration Engine workflow review (Sprint 12) into an actual domain model, per [ADR-0017](./adrs/0017-configuration-before-operations.md). Implementing this as a `schema.prisma` migration is a separate, later task, exactly as the original model was once separate from this document.
+- **Configuration Engine extension** (`Plan`, `PlanPrice`, `Fee`, `PlanFee`, `ChildFeeAssignment`, `Discount`, `ChildDiscountAssignment`, `SiblingDiscountTier`, `Waiver`, `Holiday`, `BillingRun`, `PaymentAllocation`, `ManualOverride`, plus modifications to `Enrollment`, `InvoiceLineItem`, `Payment`, `Tenant`) — **approved; core backend implementation complete.** The schema/migration layer has shipped (plus two follow-up corrections found during implementation — see `docs/SESSION_CHECKPOINT.md`), and the backend service layer built on top of it is also complete for every service with a named caller — see [configuration-engine-backend-services.md](./configuration-engine-backend-services.md) and [roadmap.md](./roadmap.md) for current status. This formalizes the business rules from the Configuration Engine workflow review (Sprint 12) into an actual domain model, per [ADR-0017](./adrs/0017-configuration-before-operations.md).
 
 It also reopens one of ADR-0001's stated non-goals (billing) in a
 deliberately scoped way — see "Deferred Entities" for what remains excluded.
