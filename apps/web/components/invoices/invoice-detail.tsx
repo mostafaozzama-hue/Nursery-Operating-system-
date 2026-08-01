@@ -19,8 +19,8 @@ import {
   INVOICE_STATUS_BADGE_VARIANT,
   INVOICE_STATUS_LABEL,
   formatInvoiceDate,
-  formatMoney,
 } from '@/lib/invoices/mapper';
+import { formatMoney } from '@/lib/money';
 import { useAddLineItem, useIssueInvoice, useVoidInvoice } from '@/lib/invoices/mutations';
 import { useInvoice, useInvoiceLineItems, useInvoicePayments } from '@/lib/invoices/queries';
 import {

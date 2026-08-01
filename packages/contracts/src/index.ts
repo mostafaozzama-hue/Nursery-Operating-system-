@@ -13,3 +13,5 @@ export * from './attendance/types';
 export * from './invoices/types';
 export * from './payments/types';
 export * from './plans/types';
+export * from './fees/types';
+export * from './plan-prices/types';

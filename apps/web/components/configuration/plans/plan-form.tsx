@@ -40,10 +40,9 @@ type PlanFormProps = { mode: 'create' } | { mode: 'edit'; planId: string };
 
 /**
  * Shared create/edit, mirroring ClassroomForm's mode-discriminated-union
- * shape exactly. There is no Plan Detail page yet (later sprint) - both
- * create and edit land back on the Plans List on success, not a detail
- * page, since there's nowhere else to send the user yet. Revisit once
- * Plan Detail ships.
+ * shape exactly. Both create and edit land on Plan Detail on success now
+ * that it exists (Sprint 2) - previously redirected to Plans List as a
+ * deliberately temporary shape before Plan Detail shipped.
  */
 export function PlanForm(props: PlanFormProps) {
   const router = useRouter();
@@ -100,10 +99,11 @@ export function PlanForm(props: PlanFormProps) {
     try {
       if (props.mode === 'edit') {
         await updatePlan(props.planId, toUpdatePlanRequest(result.data));
+        router.push(`/dashboard/configuration/plans/${props.planId}`);
       } else {
-        await createPlan(toCreatePlanRequest(result.data));
+        const plan = await createPlan(toCreatePlanRequest(result.data));
+        router.push(`/dashboard/configuration/plans/${plan.id}`);
       }
-      router.push('/dashboard/configuration/plans');
     } catch {
       // surfaced via createError/updateError below
     }

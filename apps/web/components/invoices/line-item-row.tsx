@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
-import { formatMoney } from '@/lib/invoices/mapper';
 import { useRemoveLineItem, useUpdateLineItem } from '@/lib/invoices/mutations';
+import { formatMoney } from '@/lib/money';
 import { lineItemFormSchema, type LineItemFormValues } from '@/lib/invoices/schema';
 
 /** One line item row - display, inline edit, and remove (ConfirmDialog-gated per rule 6). Editable only while the parent invoice is DRAFT and the caller is OWNER/ADMIN - both already checked by the caller before rendering `editable`. */

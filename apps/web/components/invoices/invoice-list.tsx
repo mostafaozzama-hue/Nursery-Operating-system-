@@ -24,8 +24,8 @@ import {
   INVOICE_STATUS_BADGE_VARIANT,
   INVOICE_STATUS_LABEL,
   formatInvoiceDate,
-  formatMoney,
 } from '@/lib/invoices/mapper';
+import { formatMoney } from '@/lib/money';
 import { useInvoiceList } from '@/lib/invoices/queries';
 
 const STATUS_OPTIONS: InvoiceStatus[] = [

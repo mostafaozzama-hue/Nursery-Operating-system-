@@ -1,6 +1,6 @@
 'use client';
 
-import type { CreatePlanRequest, Plan, UpdatePlanRequest } from '@nursery-os/contracts';
+import type { PlanPrice, SetPlanPriceRequest } from '@nursery-os/contracts';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 
@@ -32,18 +32,8 @@ function useApiMutation<TArgs extends unknown[], TResult>(
   return { mutate, isPending, error };
 }
 
-export function useCreatePlan(): MutationResult<[CreatePlanRequest], Plan> {
-  return useApiMutation(api.plans.create);
-}
-
-export function useUpdatePlan(): MutationResult<[string, UpdatePlanRequest], Plan> {
-  return useApiMutation((id: string, body: UpdatePlanRequest) => api.plans.update(id, body));
-}
-
-export function useActivatePlan(): MutationResult<[string], Plan> {
-  return useApiMutation(api.plans.activate);
-}
-
-export function useDeactivatePlan(): MutationResult<[string], Plan> {
-  return useApiMutation(api.plans.deactivate);
+export function useSetPlanPrice(): MutationResult<[string, SetPlanPriceRequest], PlanPrice> {
+  return useApiMutation((planId: string, body: SetPlanPriceRequest) =>
+    api.planPrices.setPrice(planId, body),
+  );
 }

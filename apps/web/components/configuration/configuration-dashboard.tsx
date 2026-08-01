@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
+import { useFeeSummary } from '@/lib/fees/queries';
 import { usePlanSummary } from '@/lib/plans/queries';
 import { ConfigurationSectionHeader } from './configuration-section-header';
 
@@ -11,9 +12,9 @@ import { ConfigurationSectionHeader } from './configuration-section-header';
  * Frozen spec (see docs/SESSION_CHECKPOINT.md for the full design history):
  * every card answers one operational question and ends in a single "Next
  * Step" derived honestly from real backend state - never an invented
- * health metric. Only the Plans card is live this sprint - Fees/Discounts/
- * Billing Runs render a plain "not available yet" state, not because the
- * backend lacks the data (Fees' GET /fees already exists) but because
+ * health metric. Plans and Fees are live now that Sprint 2 shipped Fees'
+ * own frontend; Discounts/Billing Runs still render a plain "not available
+ * yet" state, not because their backend data is unavailable but because
  * THEIR OWN frontend screens aren't part of this sprint's scope yet, and a
  * card linking to a route that doesn't exist would be worse than an honest
  * stub. Waivers gets a plain text line, not a card - there's no tenant-wide
@@ -23,6 +24,7 @@ import { ConfigurationSectionHeader } from './configuration-section-header';
  */
 export function ConfigurationDashboard() {
   const plans = usePlanSummary();
+  const fees = useFeeSummary();
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,7 +44,12 @@ export function ConfigurationDashboard() {
           activeCount={plans.activeCount}
           total={plans.total}
         />
-        <StubCard title="Fees" />
+        <FeesCard
+          isLoading={fees.isLoading}
+          error={fees.error}
+          activeCount={fees.activeCount}
+          total={fees.total}
+        />
         <StubCard title="Discounts" />
         <StubCard title="Billing Runs" />
       </div>
@@ -87,6 +94,49 @@ function PlansCard({
             {activeCount === 0
               ? 'No active plans — nothing can be billed yet.'
               : `${activeCount} active plan${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FeesCard({
+  isLoading,
+  error,
+  activeCount,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  activeCount: number;
+  total: number;
+}) {
+  const nextStep =
+    activeCount === 0
+      ? { label: 'Add a fee', href: '/dashboard/configuration/fees/new' }
+      : { label: 'Review optional fees', href: '/dashboard/configuration/fees' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Fees</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {activeCount === 0
+              ? 'No fees configured yet.'
+              : `${activeCount} active fee${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
           </p>
           <Button asChild variant="outline" size="sm" className="w-fit">
             <Link href={nextStep.href}>{nextStep.label}</Link>

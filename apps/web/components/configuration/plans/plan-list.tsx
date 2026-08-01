@@ -36,7 +36,15 @@ export function PlanList() {
   const { data, total, totalPages, query, isLoading, error, setQuery, refetch } = usePlanList();
 
   const columns: DataTableColumn<Plan>[] = [
-    { header: 'Name', cell: (plan) => plan.name, sortKey: 'name' },
+    {
+      header: 'Name',
+      cell: (plan) => (
+        <Link href={`/dashboard/configuration/plans/${plan.id}`} className="hover:underline">
+          {plan.name}
+        </Link>
+      ),
+      sortKey: 'name',
+    },
     {
       header: 'Billing cycle',
       cell: (plan) => PLAN_BILLING_CYCLE_LABEL[plan.billingCycle],
