@@ -3,9 +3,9 @@
 import type {
   Invoice,
   InvoiceLineItem,
+  InvoicePaymentAllocation,
   InvoiceSortField,
   InvoiceStatus,
-  Payment,
 } from '@nursery-os/contracts';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -235,15 +235,15 @@ export function useInvoiceLineItems(invoiceId: string): InvoiceLineItemsResult {
 }
 
 export interface InvoicePaymentsResult {
-  data: Payment[];
+  data: InvoicePaymentAllocation[];
   isLoading: boolean;
   error: unknown;
   refetch: () => void;
 }
 
-/** Payments for one invoice - embedded, not URL-driven, same reasoning as useChildEnrollments (a handful of rows, not pages of them). Capped at the API's max page size (100), same documented boundary as every other directory-style hook. */
+/** Payments applied to one invoice - embedded, not URL-driven, same reasoning as useChildEnrollments (a handful of rows, not pages of them). Read-only, joining through PaymentAllocation - amountApplied is this invoice's own portion of a payment that may span several invoices, not the payment's full amount. Capped at the API's max page size (100), same documented boundary as every other directory-style hook. */
 export function useInvoicePayments(invoiceId: string): InvoicePaymentsResult {
-  const [data, setData] = useState<Payment[]>([]);
+  const [data, setData] = useState<InvoicePaymentAllocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [reloadToken, setReloadToken] = useState(0);

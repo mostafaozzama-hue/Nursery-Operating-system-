@@ -7,6 +7,7 @@ import { enrollments } from './endpoints/enrollments';
 import { guardians } from './endpoints/guardians';
 import { invoices } from './endpoints/invoices';
 import { memberships } from './endpoints/memberships';
+import { payments } from './endpoints/payments';
 import { payroll } from './endpoints/payroll';
 import { staff } from './endpoints/staff';
 
@@ -22,4 +23,5 @@ export const api = {
   payroll,
   attendance,
   invoices,
+  payments,
 };

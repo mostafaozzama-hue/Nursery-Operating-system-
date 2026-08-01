@@ -1,4 +1,4 @@
-import type { InvoiceStatus, PaymentMethod } from '@nursery-os/contracts';
+import type { InvoiceStatus } from '@nursery-os/contracts';
 
 /**
  * Invoice/Payment carry no currency field of their own (unlike
@@ -43,13 +43,4 @@ export const INVOICE_STATUS_BADGE_VARIANT: Record<
   PAID: 'success',
   OVERDUE: 'destructive',
   VOID: 'muted',
-};
-
-export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
-  CASH: 'Cash',
-  INSTAPAY: 'InstaPay',
-  WALLET: 'Mobile wallet',
-  BANK_TRANSFER: 'Bank transfer',
-  CREDIT_DEBIT_CARD: 'Credit/debit card',
-  OTHER: 'Other',
 };

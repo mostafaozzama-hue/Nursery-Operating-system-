@@ -3,19 +3,18 @@ import type {
   CreateLineItemRequest,
   Invoice,
   InvoiceLineItem,
+  InvoicePaymentAllocation,
   InvoiceQuery,
   IssueInvoiceRequest,
   LineItemQuery,
   Paginated,
-  Payment,
   PaymentQuery,
-  RecordPaymentRequest,
   UpdateInvoiceRequest,
   UpdateLineItemRequest,
 } from '@nursery-os/contracts';
 import { get, patch, post, del } from '../client';
 
-/** No top-level DELETE - invoices are financial history, voided rather than deleted, same reasoning as Enrollment/Attendance. Line items and payments are nested, not flat resources - neither has an independent lifecycle apart from its parent invoice. */
+/** No top-level DELETE - invoices are financial history, voided rather than deleted, same reasoning as Enrollment/Attendance. Line items are nested, no independent lifecycle apart from their parent invoice. Payments are recorded guardian-anchored now (see endpoints/payments.ts) - listPayments here is a read-only view joining through PaymentAllocation. */
 export const invoices = {
   create: (body: CreateInvoiceRequest) => post<Invoice>('/invoices', body),
   list: (query?: InvoiceQuery) => get<Paginated<Invoice>>('/invoices', query),
@@ -31,9 +30,7 @@ export const invoices = {
     get<Paginated<InvoiceLineItem>>(`/invoices/${invoiceId}/line-items`, query),
   issue: (invoiceId: string, body: IssueInvoiceRequest) =>
     post<Invoice>(`/invoices/${invoiceId}/issue`, body),
-  recordPayment: (invoiceId: string, body: RecordPaymentRequest) =>
-    post<Payment>(`/invoices/${invoiceId}/payments`, body),
   listPayments: (invoiceId: string, query?: PaymentQuery) =>
-    get<Paginated<Payment>>(`/invoices/${invoiceId}/payments`, query),
+    get<Paginated<InvoicePaymentAllocation>>(`/invoices/${invoiceId}/payments`, query),
   void: (invoiceId: string) => post<Invoice>(`/invoices/${invoiceId}/void`),
 };

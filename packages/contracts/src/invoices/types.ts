@@ -1,4 +1,5 @@
 import type { PaginationQuery } from '../common/pagination';
+import type { PaymentMethod } from '../payments/types';
 
 export const INVOICE_STATUSES = [
   'DRAFT',
@@ -11,16 +12,6 @@ export const INVOICE_STATUSES = [
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
 export type InvoiceSortField = 'createdAt' | 'totalAmount';
-
-export const PAYMENT_METHODS = [
-  'CASH',
-  'INSTAPAY',
-  'WALLET',
-  'BANK_TRANSFER',
-  'CREDIT_DEBIT_CARD',
-  'OTHER',
-] as const;
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export type PaymentSortField = 'paidAt' | 'createdAt';
 
@@ -46,14 +37,14 @@ export interface InvoiceLineItem {
   updatedAt: string;
 }
 
-export interface Payment {
+/** One payment's application to this specific invoice, via PaymentAllocation - amountApplied is this invoice's own portion, not the payment's full amount (a payment can span several invoices). Payment itself is guardian-anchored now - see payments/types.ts. */
+export interface InvoicePaymentAllocation {
   id: string;
-  invoiceId: string;
-  amount: string;
+  paymentId: string;
+  amountApplied: string;
   paymentMethod: PaymentMethod;
   paidAt: string;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface InvoiceQuery extends PaginationQuery {
@@ -96,10 +87,4 @@ export type UpdateLineItemRequest = Partial<CreateLineItemRequest>;
 
 export interface IssueInvoiceRequest {
   dueDate?: string;
-}
-
-export interface RecordPaymentRequest {
-  amount: number;
-  paymentMethod: PaymentMethod;
-  paidAt?: string;
 }

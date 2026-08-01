@@ -13,29 +13,31 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { isApiError } from '@/lib/api/errors';
-import { PAYMENT_METHOD_LABEL } from '@/lib/invoices/mapper';
-import { useRecordPayment } from '@/lib/invoices/mutations';
+import { PAYMENT_METHOD_LABEL } from '@/lib/payments/mapper';
+import { useRecordPayment } from '@/lib/payments/mutations';
 import {
   emptyRecordPaymentFormValues,
   recordPaymentFormSchema,
   toRecordPaymentRequest,
   type RecordPaymentFormValues,
-} from '@/lib/invoices/schema';
+} from '@/lib/payments/schema';
 import { PAYMENT_METHODS } from '@nursery-os/contracts';
 
 /**
+ * Guardian-anchored - Payment is recorded against a Guardian (the billing
+ * party), then allocated oldest-invoice-first across all their children.
  * Sheet side="right" - the quick-create-from-a-detail-page pattern
- * design-system.md §5.13 names explicitly ("Add Guardian from within a
- * Child's linked-guardians section"), reused here for recording a payment
- * without leaving Invoice Detail.
+ * design-system.md §5.13 names explicitly. Currently launched only from
+ * Invoice Detail; parameterized by guardianId (not invoiceId) so a future
+ * Guardian Detail "Record payment" entry point can reuse it as-is.
  */
 export function RecordPaymentSheet({
-  invoiceId,
+  guardianId,
   open,
   onOpenChange,
   onDone,
 }: {
-  invoiceId: string;
+  guardianId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
@@ -60,7 +62,7 @@ export function RecordPaymentSheet({
     setFieldErrors({});
 
     try {
-      await recordPayment(invoiceId, toRecordPaymentRequest(result.data));
+      await recordPayment(guardianId, toRecordPaymentRequest(result.data));
       setValues(emptyRecordPaymentFormValues);
       onDone();
     } catch {
@@ -76,6 +78,11 @@ export function RecordPaymentSheet({
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-4">
+          <p className="text-xs text-muted-foreground">
+            Applied to this guardian&apos;s oldest outstanding invoice first - may not apply fully
+            to the invoice you started from if others are older.
+          </p>
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="amount">Amount</Label>
             <Input

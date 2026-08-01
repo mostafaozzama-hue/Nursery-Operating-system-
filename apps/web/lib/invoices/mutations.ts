@@ -6,8 +6,6 @@ import type {
   Invoice,
   InvoiceLineItem,
   IssueInvoiceRequest,
-  Payment,
-  RecordPaymentRequest,
   UpdateInvoiceRequest,
   UpdateLineItemRequest,
 } from '@nursery-os/contracts';
@@ -74,12 +72,6 @@ export function useRemoveLineItem(): MutationResult<[string, string], void> {
 export function useIssueInvoice(): MutationResult<[string, IssueInvoiceRequest], Invoice> {
   return useApiMutation((invoiceId: string, body: IssueInvoiceRequest) =>
     api.invoices.issue(invoiceId, body),
-  );
-}
-
-export function useRecordPayment(): MutationResult<[string, RecordPaymentRequest], Payment> {
-  return useApiMutation((invoiceId: string, body: RecordPaymentRequest) =>
-    api.invoices.recordPayment(invoiceId, body),
   );
 }
 

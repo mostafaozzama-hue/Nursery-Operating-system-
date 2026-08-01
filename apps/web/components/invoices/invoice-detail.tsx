@@ -18,7 +18,6 @@ import { useGuardianDirectory } from '@/lib/guardians/queries';
 import {
   INVOICE_STATUS_BADGE_VARIANT,
   INVOICE_STATUS_LABEL,
-  PAYMENT_METHOD_LABEL,
   formatInvoiceDate,
   formatMoney,
 } from '@/lib/invoices/mapper';
@@ -29,8 +28,9 @@ import {
   lineItemFormSchema,
   type LineItemFormValues,
 } from '@/lib/invoices/schema';
+import { PAYMENT_METHOD_LABEL } from '@/lib/payments/mapper';
+import { RecordPaymentSheet } from '@/components/payments/record-payment-sheet';
 import { LineItemRow } from './line-item-row';
-import { RecordPaymentSheet } from './record-payment-sheet';
 
 const PAYABLE_STATUSES = ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'];
 
@@ -305,7 +305,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
                 >
                   <span>{PAYMENT_METHOD_LABEL[payment.paymentMethod]}</span>
                   <span className="text-muted-foreground">{formatInvoiceDate(payment.paidAt)}</span>
-                  <span className="font-medium">{formatMoney(payment.amount)}</span>
+                  <span className="font-medium">{formatMoney(payment.amountApplied)}</span>
                 </div>
               ))}
             </div>
@@ -324,7 +324,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
       />
 
       <RecordPaymentSheet
-        invoiceId={invoiceId}
+        guardianId={data.billedToGuardianId}
         open={paymentSheetOpen}
         onOpenChange={setPaymentSheetOpen}
         onDone={() => {
