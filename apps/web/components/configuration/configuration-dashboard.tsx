@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
+import { useDiscountSummary } from '@/lib/discounts/queries';
 import { useFeeSummary } from '@/lib/fees/queries';
 import { usePlanSummary } from '@/lib/plans/queries';
 import { ConfigurationSectionHeader } from './configuration-section-header';
@@ -12,19 +13,23 @@ import { ConfigurationSectionHeader } from './configuration-section-header';
  * Frozen spec (see docs/SESSION_CHECKPOINT.md for the full design history):
  * every card answers one operational question and ends in a single "Next
  * Step" derived honestly from real backend state - never an invented
- * health metric. Plans and Fees are live now that Sprint 2 shipped Fees'
- * own frontend; Discounts/Billing Runs still render a plain "not available
- * yet" state, not because their backend data is unavailable but because
- * THEIR OWN frontend screens aren't part of this sprint's scope yet, and a
- * card linking to a route that doesn't exist would be worse than an honest
- * stub. Waivers gets a plain text line, not a card - there's no tenant-wide
- * endpoint to summarize it, no Next Step to derive, and (unlike Fees/
- * Discounts/Billing Runs) no per-child waiver UI exists anywhere in the app
- * yet either, so the copy must not imply one does.
+ * health metric. Plans, Fees, and now Discounts are live now that their own
+ * frontend screens have shipped; Billing Runs still renders a plain "not
+ * available yet" state, not because its backend data is unavailable but
+ * because ITS OWN frontend screens aren't part of this sprint's scope yet,
+ * and a card linking to a route that doesn't exist would be worse than an
+ * honest stub. Sibling Discount Tiers deliberately gets no card at all - a
+ * low-frequency configuration page, reached only via a secondary link from
+ * the Discounts page, not one of the entities a nursery admin touches
+ * routinely. Waivers gets a plain text line, not a card - there's no
+ * tenant-wide endpoint to summarize it, no Next Step to derive, and (unlike
+ * Fees/Discounts/Billing Runs) no per-child waiver UI exists anywhere in the
+ * app yet either, so the copy must not imply one does.
  */
 export function ConfigurationDashboard() {
   const plans = usePlanSummary();
   const fees = useFeeSummary();
+  const discounts = useDiscountSummary();
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,7 +55,12 @@ export function ConfigurationDashboard() {
           activeCount={fees.activeCount}
           total={fees.total}
         />
-        <StubCard title="Discounts" />
+        <DiscountsCard
+          isLoading={discounts.isLoading}
+          error={discounts.error}
+          activeCount={discounts.activeCount}
+          total={discounts.total}
+        />
         <StubCard title="Billing Runs" />
       </div>
 
@@ -137,6 +147,49 @@ function FeesCard({
             {activeCount === 0
               ? 'No fees configured yet.'
               : `${activeCount} active fee${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DiscountsCard({
+  isLoading,
+  error,
+  activeCount,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  activeCount: number;
+  total: number;
+}) {
+  const nextStep =
+    activeCount === 0
+      ? { label: 'Add a discount', href: '/dashboard/configuration/discounts/new' }
+      : { label: 'Review discounts', href: '/dashboard/configuration/discounts' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Discounts</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {activeCount === 0
+              ? 'No discounts configured yet.'
+              : `${activeCount} active discount${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
           </p>
           <Button asChild variant="outline" size="sm" className="w-fit">
             <Link href={nextStep.href}>{nextStep.label}</Link>

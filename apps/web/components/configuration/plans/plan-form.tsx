@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,36 +43,83 @@ type PlanFormProps = { mode: 'create' } | { mode: 'edit'; planId: string };
  * shape exactly. Both create and edit land on Plan Detail on success now
  * that it exists (Sprint 2) - previously redirected to Plans List as a
  * deliberately temporary shape before Plan Detail shipped.
+ *
+ * This outer component owns only the async-loading/error gate for edit mode - it deliberately does
+ * NOT hold the form's `values` state itself. `PlanFormBody` below only ever mounts once the fetched
+ * Plan (in edit mode) is already in hand, so its `useState` seeds directly from real data on its one
+ * true first render. The previous shape (a single component whose `values` state started empty and
+ * was patched via a `useEffect` once `existing.data` arrived) fed the Billing cycle Select a `value`
+ * prop change on an already-mounted instance - the underlying Radix Select does not apply a value
+ * update like that, and silently resets to empty instead (confirmed by instrumenting `onValueChange`
+ * on the identical pattern in DiscountForm/FeeForm, which fires with `""` immediately after the
+ * effect's `setValues` call - the bug is in the shared pattern, not anything entity-specific).
+ * Gating on a separate component boundary means the Select is never mounted with anything but its
+ * final, correct value - the same shape that already works correctly in create mode.
  */
 export function PlanForm(props: PlanFormProps) {
-  const router = useRouter();
   const isEdit = props.mode === 'edit';
   const existing = usePlan(isEdit ? props.planId : null);
+
+  if (isEdit && existing.isLoading) {
+    return <p>Loading…</p>;
+  }
+
+  if (isEdit && existing.error) {
+    return (
+      <p className="text-destructive">
+        {isApiError(existing.error) ? existing.error.message : 'Something went wrong.'}
+      </p>
+    );
+  }
+
+  const initialValues: PlanFormValues =
+    isEdit && existing.data
+      ? {
+          name: existing.data.name,
+          billingCycle: existing.data.billingCycle,
+          scheduleDaysOfWeek: existing.data.scheduleDaysOfWeek,
+          scheduleStartTime: existing.data.scheduleStartTime
+            ? toTimeInputValue(existing.data.scheduleStartTime)
+            : '',
+          scheduleEndTime: existing.data.scheduleEndTime
+            ? toTimeInputValue(existing.data.scheduleEndTime)
+            : '',
+        }
+      : emptyPlanFormValues;
+
+  const initialShowScheduleWindow = Boolean(
+    isEdit && existing.data && (existing.data.scheduleStartTime || existing.data.scheduleEndTime),
+  );
+
+  return (
+    <PlanFormBody
+      mode={props.mode}
+      planId={isEdit ? props.planId : undefined}
+      initialValues={initialValues}
+      initialShowScheduleWindow={initialShowScheduleWindow}
+    />
+  );
+}
+
+function PlanFormBody({
+  mode,
+  planId,
+  initialValues,
+  initialShowScheduleWindow,
+}: {
+  mode: 'create' | 'edit';
+  planId?: string;
+  initialValues: PlanFormValues;
+  initialShowScheduleWindow: boolean;
+}) {
+  const router = useRouter();
+  const isEdit = mode === 'edit';
   const { mutate: createPlan, isPending: isCreating, error: createError } = useCreatePlan();
   const { mutate: updatePlan, isPending: isUpdating, error: updateError } = useUpdatePlan();
 
-  const [values, setValues] = useState<PlanFormValues>(emptyPlanFormValues);
+  const [values, setValues] = useState<PlanFormValues>(initialValues);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof PlanFormValues, string>>>({});
-  const [showScheduleWindow, setShowScheduleWindow] = useState(false);
-
-  useEffect(() => {
-    if (isEdit && existing.data) {
-      setValues({
-        name: existing.data.name,
-        billingCycle: existing.data.billingCycle,
-        scheduleDaysOfWeek: existing.data.scheduleDaysOfWeek,
-        scheduleStartTime: existing.data.scheduleStartTime
-          ? toTimeInputValue(existing.data.scheduleStartTime)
-          : '',
-        scheduleEndTime: existing.data.scheduleEndTime
-          ? toTimeInputValue(existing.data.scheduleEndTime)
-          : '',
-      });
-      if (existing.data.scheduleStartTime || existing.data.scheduleEndTime) {
-        setShowScheduleWindow(true);
-      }
-    }
-  }, [isEdit, existing.data]);
+  const [showScheduleWindow, setShowScheduleWindow] = useState(initialShowScheduleWindow);
 
   const toggleDay = (day: PlanDayOfWeek) => {
     setValues((prev) => ({
@@ -97,9 +144,9 @@ export function PlanForm(props: PlanFormProps) {
     setFieldErrors({});
 
     try {
-      if (props.mode === 'edit') {
-        await updatePlan(props.planId, toUpdatePlanRequest(result.data));
-        router.push(`/dashboard/configuration/plans/${props.planId}`);
+      if (isEdit && planId) {
+        await updatePlan(planId, toUpdatePlanRequest(result.data));
+        router.push(`/dashboard/configuration/plans/${planId}`);
       } else {
         const plan = await createPlan(toCreatePlanRequest(result.data));
         router.push(`/dashboard/configuration/plans/${plan.id}`);
@@ -108,18 +155,6 @@ export function PlanForm(props: PlanFormProps) {
       // surfaced via createError/updateError below
     }
   };
-
-  if (isEdit && existing.isLoading) {
-    return <p>Loading…</p>;
-  }
-
-  if (isEdit && existing.error) {
-    return (
-      <p className="text-destructive">
-        {isApiError(existing.error) ? existing.error.message : 'Something went wrong.'}
-      </p>
-    );
-  }
 
   const submitError = createError ?? updateError;
   const isSubmitting = isCreating || isUpdating;

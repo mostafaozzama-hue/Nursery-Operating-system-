@@ -3,6 +3,7 @@ import { auth } from './endpoints/auth';
 import { childGuardians } from './endpoints/child-guardians';
 import { children } from './endpoints/children';
 import { classrooms } from './endpoints/classrooms';
+import { discounts } from './endpoints/discounts';
 import { enrollmentBillingTerms } from './endpoints/enrollment-billing-terms';
 import { enrollments } from './endpoints/enrollments';
 import { fees } from './endpoints/fees';
@@ -14,6 +15,7 @@ import { payroll } from './endpoints/payroll';
 import { planFees } from './endpoints/plan-fees';
 import { planPrices } from './endpoints/plan-prices';
 import { plans } from './endpoints/plans';
+import { siblingDiscountTiers } from './endpoints/sibling-discount-tiers';
 import { staff } from './endpoints/staff';
 
 export const api = {
@@ -33,5 +35,7 @@ export const api = {
   planPrices,
   planFees,
   fees,
+  discounts,
   enrollmentBillingTerms,
+  siblingDiscountTiers,
 };

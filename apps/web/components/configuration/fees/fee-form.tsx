@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,26 +28,72 @@ import { ConfigurationSectionHeader } from '../configuration-section-header';
 
 type FeeFormProps = { mode: 'create' } | { mode: 'edit'; feeId: string };
 
-/** Shared create/edit, mirroring PlanForm's mode-discriminated-union shape exactly. There is no Fee Detail page - both create and edit land back on the Fees List on success. */
+/**
+ * Shared create/edit, mirroring PlanForm's mode-discriminated-union shape exactly. There is no Fee
+ * Detail page - both create and edit land back on the Fees List on success.
+ *
+ * This outer component owns only the async-loading/error gate for edit mode - it deliberately does
+ * NOT hold the form's `values` state itself. `FeeFormBody` below only ever mounts once the fetched
+ * Fee (in edit mode) is already in hand, so its `useState` seeds directly from real data on its one
+ * true first render. The previous shape (a single component whose `values` state started empty and
+ * was patched via a `useEffect` once `existing.data` arrived) fed the Type Select a `value` prop
+ * change on an already-mounted instance - the underlying Radix Select does not apply a value update
+ * like that, and silently resets to empty instead (confirmed by instrumenting `onValueChange` on the
+ * identical pattern in DiscountForm, which fires with `""` immediately after the effect's
+ * `setValues` call - the bug is in the shared pattern, not anything Fee- or Discount-specific).
+ * Gating on a separate component boundary means the Select is never mounted with anything but its
+ * final, correct value - the same shape that already works correctly in create mode.
+ */
 export function FeeForm(props: FeeFormProps) {
-  const router = useRouter();
   const isEdit = props.mode === 'edit';
   const existing = useFee(isEdit ? props.feeId : null);
+
+  if (isEdit && existing.isLoading) {
+    return <p>Loading…</p>;
+  }
+
+  if (isEdit && existing.error) {
+    return (
+      <p className="text-destructive">
+        {isApiError(existing.error) ? existing.error.message : 'Something went wrong.'}
+      </p>
+    );
+  }
+
+  const initialValues: FeeFormValues =
+    isEdit && existing.data
+      ? {
+          name: existing.data.name,
+          type: existing.data.type,
+          amount: existing.data.amount,
+        }
+      : emptyFeeFormValues;
+
+  return (
+    <FeeFormBody
+      mode={props.mode}
+      feeId={isEdit ? props.feeId : undefined}
+      initialValues={initialValues}
+    />
+  );
+}
+
+function FeeFormBody({
+  mode,
+  feeId,
+  initialValues,
+}: {
+  mode: 'create' | 'edit';
+  feeId?: string;
+  initialValues: FeeFormValues;
+}) {
+  const router = useRouter();
+  const isEdit = mode === 'edit';
   const { mutate: createFee, isPending: isCreating, error: createError } = useCreateFee();
   const { mutate: updateFee, isPending: isUpdating, error: updateError } = useUpdateFee();
 
-  const [values, setValues] = useState<FeeFormValues>(emptyFeeFormValues);
+  const [values, setValues] = useState<FeeFormValues>(initialValues);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FeeFormValues, string>>>({});
-
-  useEffect(() => {
-    if (isEdit && existing.data) {
-      setValues({
-        name: existing.data.name,
-        type: existing.data.type,
-        amount: existing.data.amount,
-      });
-    }
-  }, [isEdit, existing.data]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -63,8 +109,8 @@ export function FeeForm(props: FeeFormProps) {
     setFieldErrors({});
 
     try {
-      if (props.mode === 'edit') {
-        await updateFee(props.feeId, toUpdateFeeRequest(result.data));
+      if (isEdit && feeId) {
+        await updateFee(feeId, toUpdateFeeRequest(result.data));
       } else {
         await createFee(toCreateFeeRequest(result.data));
       }
@@ -73,18 +119,6 @@ export function FeeForm(props: FeeFormProps) {
       // surfaced via createError/updateError below
     }
   };
-
-  if (isEdit && existing.isLoading) {
-    return <p>Loading…</p>;
-  }
-
-  if (isEdit && existing.error) {
-    return (
-      <p className="text-destructive">
-        {isApiError(existing.error) ? existing.error.message : 'Something went wrong.'}
-      </p>
-    );
-  }
 
   const submitError = createError ?? updateError;
   const isSubmitting = isCreating || isUpdating;
