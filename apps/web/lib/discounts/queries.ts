@@ -249,3 +249,63 @@ export function useDiscountSummary(): DiscountSummaryResult {
 
   return { total, activeCount, isLoading, error };
 }
+
+export interface DiscountDirectoryResult {
+  discounts: Discount[];
+  byId: Map<string, Discount>;
+  isLoading: boolean;
+  error: unknown;
+  refetch: () => void;
+}
+
+/**
+ * Flat, non-paginated fetch for picker use (e.g. assigning a Discount to a Child) - mirrors
+ * useFeeDirectory's shape exactly. Active-only by default: the picker itself is the frontend's own
+ * decision not to offer inactive discounts for new use, the backend doesn't require it. Not built
+ * in Sprint 4 since there was no consumer yet - the Discount-assignment picker is that consumer.
+ * Pass includeInactive when the consumer needs to resolve a Discount that may since have been
+ * deactivated (e.g. displaying a Child's existing discount-assignment history) - deactivating a
+ * Discount only blocks new assignments, existing ones stay unaffected, so their display must still
+ * resolve.
+ */
+export function useDiscountDirectory(includeInactive = false): DiscountDirectoryResult {
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    api.discounts
+      .list({
+        page: 1,
+        pageSize: 100,
+        isActive: includeInactive ? undefined : true,
+        sortBy: 'name',
+        sortOrder: 'asc',
+      })
+      .then((result) => {
+        if (!cancelled) setDiscounts(result.data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [includeInactive, reloadToken]);
+
+  const byId = useMemo(
+    () => new Map(discounts.map((discount) => [discount.id, discount])),
+    [discounts],
+  );
+
+  return { discounts, byId, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
+}

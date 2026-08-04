@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
 import { useDiscountSummary } from '@/lib/discounts/queries';
 import { useFeeSummary } from '@/lib/fees/queries';
+import { useHolidaySummary } from '@/lib/holidays/queries';
 import { usePlanSummary } from '@/lib/plans/queries';
 import { ConfigurationSectionHeader } from './configuration-section-header';
 
@@ -13,23 +14,26 @@ import { ConfigurationSectionHeader } from './configuration-section-header';
  * Frozen spec (see docs/SESSION_CHECKPOINT.md for the full design history):
  * every card answers one operational question and ends in a single "Next
  * Step" derived honestly from real backend state - never an invented
- * health metric. Plans, Fees, and now Discounts are live now that their own
- * frontend screens have shipped; Billing Runs still renders a plain "not
- * available yet" state, not because its backend data is unavailable but
- * because ITS OWN frontend screens aren't part of this sprint's scope yet,
- * and a card linking to a route that doesn't exist would be worse than an
- * honest stub. Sibling Discount Tiers deliberately gets no card at all - a
- * low-frequency configuration page, reached only via a secondary link from
- * the Discounts page, not one of the entities a nursery admin touches
- * routinely. Waivers gets a plain text line, not a card - there's no
- * tenant-wide endpoint to summarize it, no Next Step to derive, and (unlike
- * Fees/Discounts/Billing Runs) no per-child waiver UI exists anywhere in the
- * app yet either, so the copy must not imply one does.
+ * health metric. Plans, Fees, Discounts, and now Holidays are live now that
+ * their own frontend screens have shipped (Holidays is total-only - it has
+ * no isActive at all, so there's no active/inactive split to report, unlike
+ * the other three); Billing Runs still renders a plain "not available yet"
+ * state, not because its backend data is unavailable but because ITS OWN
+ * frontend screens aren't part of this sprint's scope yet, and a card
+ * linking to a route that doesn't exist would be worse than an honest stub.
+ * Sibling Discount Tiers deliberately gets no card at all - a low-frequency
+ * configuration page, reached only via a secondary link from the Discounts
+ * page, not one of the entities a nursery admin touches routinely. Waivers
+ * gets a plain text line, not a card - there's no tenant-wide endpoint to
+ * summarize it, no Next Step to derive, and (unlike Fees/Discounts/Holidays/
+ * Billing Runs) no per-child waiver UI exists anywhere in the app yet
+ * either, so the copy must not imply one does.
  */
 export function ConfigurationDashboard() {
   const plans = usePlanSummary();
   const fees = useFeeSummary();
   const discounts = useDiscountSummary();
+  const holidays = useHolidaySummary();
 
   return (
     <div className="flex flex-col gap-6">
@@ -60,6 +64,11 @@ export function ConfigurationDashboard() {
           error={discounts.error}
           activeCount={discounts.activeCount}
           total={discounts.total}
+        />
+        <HolidaysCard
+          isLoading={holidays.isLoading}
+          error={holidays.error}
+          total={holidays.total}
         />
         <StubCard title="Billing Runs" />
       </div>
@@ -190,6 +199,48 @@ function DiscountsCard({
             {activeCount === 0
               ? 'No discounts configured yet.'
               : `${activeCount} active discount${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Total-only, unlike every other live card here - Holiday has no isActive at all, so there is no active/inactive split to report honestly. */
+function HolidaysCard({
+  isLoading,
+  error,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  total: number;
+}) {
+  const nextStep =
+    total === 0
+      ? { label: 'Add a holiday', href: '/dashboard/configuration/holidays/new' }
+      : { label: 'Review holidays', href: '/dashboard/configuration/holidays' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Holidays</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {total === 0
+              ? 'No holidays configured yet.'
+              : `${total} holiday${total === 1 ? '' : 's'} configured.`}
           </p>
           <Button asChild variant="outline" size="sm" className="w-fit">
             <Link href={nextStep.href}>{nextStep.label}</Link>

@@ -252,13 +252,21 @@ export function useFeeSummary(): FeeSummaryResult {
 
 export interface FeeDirectoryResult {
   fees: Fee[];
+  byId: Map<string, Fee>;
   isLoading: boolean;
   error: unknown;
   refetch: () => void;
 }
 
-/** Flat, non-paginated fetch for picker use (e.g. attaching a Fee to a Plan) - mirrors useClassroomDirectory's shape exactly. Active-only: the picker itself is the frontend's own decision not to offer inactive fees for new use, the backend doesn't require it. */
-export function useFeeDirectory(): FeeDirectoryResult {
+/**
+ * Flat, non-paginated fetch for picker use (e.g. attaching a Fee to a Plan) - mirrors
+ * useClassroomDirectory's shape exactly. Active-only by default: the picker itself is the
+ * frontend's own decision not to offer inactive fees for new use, the backend doesn't require it.
+ * Pass includeInactive when the consumer needs to resolve a Fee that may since have been
+ * deactivated (e.g. displaying a Child's existing fee-assignment history) - deactivating a Fee
+ * only blocks new assignments, existing ones stay unaffected, so their display must still resolve.
+ */
+export function useFeeDirectory(includeInactive = false): FeeDirectoryResult {
   const [fees, setFees] = useState<Fee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -270,7 +278,13 @@ export function useFeeDirectory(): FeeDirectoryResult {
     setError(null);
 
     api.fees
-      .list({ page: 1, pageSize: 100, isActive: true, sortBy: 'name', sortOrder: 'asc' })
+      .list({
+        page: 1,
+        pageSize: 100,
+        isActive: includeInactive ? undefined : true,
+        sortBy: 'name',
+        sortOrder: 'asc',
+      })
       .then((result) => {
         if (!cancelled) setFees(result.data);
       })
@@ -284,7 +298,9 @@ export function useFeeDirectory(): FeeDirectoryResult {
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, [includeInactive, reloadToken]);
 
-  return { fees, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
+  const byId = useMemo(() => new Map(fees.map((fee) => [fee.id, fee])), [fees]);
+
+  return { fees, byId, isLoading, error, refetch: () => setReloadToken((t) => t + 1) };
 }

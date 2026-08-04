@@ -3,11 +3,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { DiscountAssignmentsSection } from '@/components/child-discount-assignments/discount-assignments-section';
+import { FeeAssignmentsSection } from '@/components/child-fee-assignments/fee-assignments-section';
 import { LinkedGuardiansSection } from '@/components/child-guardians/linked-guardians-section';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { EnrollmentSection } from '@/components/enrollments/enrollment-section';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
+import { WaiversSection } from '@/components/waivers/waivers-section';
 import { isApiError } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth';
 import { formatDateOfBirth, fullName } from '@/lib/children/mapper';
@@ -80,6 +83,9 @@ export function ChildDetail({ childId }: { childId: string }) {
       />
 
       <EnrollmentSection childId={childId} />
+      <FeeAssignmentsSection childId={childId} />
+      <DiscountAssignmentsSection childId={childId} />
+      {canManage && <WaiversSection childId={childId} />}
       <LinkedGuardiansSection childId={childId} />
     </div>
   );

@@ -19,3 +19,7 @@ export * from './plan-prices/types';
 export * from './plan-fees/types';
 export * from './enrollment-billing-terms/types';
 export * from './sibling-discount-tiers/types';
+export * from './holidays/types';
+export * from './child-fee-assignments/types';
+export * from './child-discount-assignments/types';
+export * from './waivers/types';
