@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
+import { useAuth } from '@/lib/auth';
+import { useBillingRunSummary } from '@/lib/billing-runs/queries';
 import { useDiscountSummary } from '@/lib/discounts/queries';
 import { useFeeSummary } from '@/lib/fees/queries';
 import { useHolidaySummary } from '@/lib/holidays/queries';
@@ -25,15 +27,22 @@ import { ConfigurationSectionHeader } from './configuration-section-header';
  * configuration page, reached only via a secondary link from the Discounts
  * page, not one of the entities a nursery admin touches routinely. Waivers
  * gets a plain text line, not a card - there's no tenant-wide endpoint to
- * summarize it, no Next Step to derive, and (unlike Fees/Discounts/Holidays/
- * Billing Runs) no per-child waiver UI exists anywhere in the app yet
- * either, so the copy must not imply one does.
+ * summarize it and no Next Step to derive (per-child waiver UI does exist,
+ * on Child Detail, but that's not a fact this tenant-wide dashboard can
+ * summarize into a single count). Billing Runs is now live (Sprint 6) -
+ * OWNER/ADMIN-only, so its card only renders for canManage, matching
+ * BillingRunController's own class-level role gate; STAFF simply doesn't see
+ * the card at all, rather than seeing a "you don't have access" stub among
+ * otherwise-real cards.
  */
 export function ConfigurationDashboard() {
+  const { user } = useAuth();
+  const canManage = user?.role === 'OWNER' || user?.role === 'ADMIN';
   const plans = usePlanSummary();
   const fees = useFeeSummary();
   const discounts = useDiscountSummary();
   const holidays = useHolidaySummary();
+  const billingRuns = useBillingRunSummary(canManage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,7 +79,13 @@ export function ConfigurationDashboard() {
           error={holidays.error}
           total={holidays.total}
         />
-        <StubCard title="Billing Runs" />
+        {canManage && (
+          <BillingRunsCard
+            isLoading={billingRuns.isLoading}
+            error={billingRuns.error}
+            total={billingRuns.total}
+          />
+        )}
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -251,14 +266,44 @@ function HolidaysCard({
   );
 }
 
-/** Deliberately not a fake "0" or a colored status - honest placeholder until this area's own frontend ships. */
-function StubCard({ title }: { title: string }) {
+/** Total-only, matching HolidaysCard's shape - a BillingRun has no active/inactive split either (it either exists or doesn't). Only rendered for canManage by the caller. */
+function BillingRunsCard({
+  isLoading,
+  error,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  total: number;
+}) {
+  const nextStep =
+    total === 0
+      ? { label: 'Trigger your first run', href: '/dashboard/configuration/billing-runs/new' }
+      : { label: 'Review billing runs', href: '/dashboard/configuration/billing-runs' };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle>Billing Runs</CardTitle>
       </CardHeader>
-      <p className="text-sm text-muted-foreground">Not available yet.</p>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {total === 0
+              ? 'No billing runs triggered yet.'
+              : `${total} billing run${total === 1 ? '' : 's'} triggered.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

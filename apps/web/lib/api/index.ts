@@ -1,5 +1,6 @@
 import { attendance } from './endpoints/attendance';
 import { auth } from './endpoints/auth';
+import { billingRuns } from './endpoints/billing-runs';
 import { childDiscountAssignments } from './endpoints/child-discount-assignments';
 import { childFeeAssignments } from './endpoints/child-fee-assignments';
 import { childGuardians } from './endpoints/child-guardians';
@@ -13,6 +14,7 @@ import { guardians } from './endpoints/guardians';
 import { holidays } from './endpoints/holidays';
 import { invoices } from './endpoints/invoices';
 import { memberships } from './endpoints/memberships';
+import { oneTimeCharges } from './endpoints/one-time-charges';
 import { payments } from './endpoints/payments';
 import { payroll } from './endpoints/payroll';
 import { planFees } from './endpoints/plan-fees';
@@ -46,4 +48,6 @@ export const api = {
   childFeeAssignments,
   childDiscountAssignments,
   waivers,
+  oneTimeCharges,
+  billingRuns,
 };

@@ -31,6 +31,7 @@ import {
 import { PAYMENT_METHOD_LABEL } from '@/lib/payments/mapper';
 import { RecordPaymentSheet } from '@/components/payments/record-payment-sheet';
 import { LineItemRow } from './line-item-row';
+import { OneTimeChargeSheet } from './one-time-charge-sheet';
 
 const PAYABLE_STATUSES = ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'];
 
@@ -54,6 +55,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
 
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
+  const [chargeSheetOpen, setChargeSheetOpen] = useState(false);
   const [newLineItem, setNewLineItem] = useState<LineItemFormValues>(emptyLineItemFormValues);
   const [newLineItemErrors, setNewLineItemErrors] = useState<
     Partial<Record<keyof LineItemFormValues, string>>
@@ -191,11 +193,18 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
       <Card>
         <CardHeader>
           <CardTitle>Line items</CardTitle>
-          {isDraft && canManage && (
-            <Button size="sm" disabled={isIssuing} onClick={handleIssue}>
-              {isIssuing ? 'Issuing…' : 'Issue invoice'}
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {!isVoid && (
+              <Button variant="outline" size="sm" onClick={() => setChargeSheetOpen(true)}>
+                Add charge
+              </Button>
+            )}
+            {isDraft && canManage && (
+              <Button size="sm" disabled={isIssuing} onClick={handleIssue}>
+                {isIssuing ? 'Issuing…' : 'Issue invoice'}
+              </Button>
+            )}
+          </div>
         </CardHeader>
 
         {issueError != null && (
@@ -331,6 +340,17 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
           setPaymentSheetOpen(false);
           refetch();
           payments.refetch();
+        }}
+      />
+
+      <OneTimeChargeSheet
+        invoice={data}
+        open={chargeSheetOpen}
+        onOpenChange={setChargeSheetOpen}
+        onDone={() => {
+          setChargeSheetOpen(false);
+          refetch();
+          lineItems.refetch();
         }}
       />
     </div>

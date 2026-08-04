@@ -17,6 +17,7 @@ interface FindManyOptions {
   pageSize: number;
   childId?: string;
   guardianId?: string;
+  billingRunId?: string;
   status?: InvoiceStatus;
   sortBy: InvoiceSortField;
   sortOrder: 'asc' | 'desc';
@@ -183,6 +184,7 @@ export class InvoiceRepository {
         deletedAt: null,
         ...(options.childId ? { childId: options.childId } : {}),
         ...(options.guardianId ? { billedToGuardianId: options.guardianId } : {}),
+        ...(options.billingRunId ? { billingRunId: options.billingRunId } : {}),
       };
 
       const where: Prisma.InvoiceWhereInput =
