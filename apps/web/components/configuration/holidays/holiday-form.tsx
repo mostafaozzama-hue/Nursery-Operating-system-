@@ -24,6 +24,7 @@ import {
   type HolidayFormValues,
 } from '@/lib/holidays/schema';
 import { HOLIDAY_TYPES, type HolidayType } from '@nursery-os/contracts';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { ConfigurationSectionHeader } from '../configuration-section-header';
 
 type HolidayFormProps = { mode: 'create' } | { mode: 'edit'; holidayId: string };
@@ -41,6 +42,11 @@ type HolidayFormProps = { mode: 'create' } | { mode: 'edit'; holidayId: string }
 export function HolidayForm(props: HolidayFormProps) {
   const isEdit = props.mode === 'edit';
   const existing = useHoliday(isEdit ? props.holidayId : null);
+
+  useBreadcrumbLabel(
+    isEdit ? props.holidayId : undefined,
+    existing.data ? existing.data.name : undefined,
+  );
 
   if (isEdit && existing.isLoading) {
     return <p>Loading…</p>;

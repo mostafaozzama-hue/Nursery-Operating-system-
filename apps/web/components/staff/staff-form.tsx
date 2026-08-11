@@ -4,6 +4,7 @@ import type { Classroom, Membership } from '@nursery-os/contracts';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ClassroomPicker } from '@/components/classrooms/classroom-picker';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { MembershipPicker } from '@/components/staff/membership-picker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
 import { useClassroomDirectory } from '@/lib/classrooms/queries';
 import { useMembershipDirectory } from '@/lib/memberships/queries';
+import { staffFullName } from '@/lib/staff/mapper';
 import { useCreateStaff, useUpdateStaff } from '@/lib/staff/mutations';
 import { useStaffMember } from '@/lib/staff/queries';
 import {
@@ -33,6 +35,11 @@ export function StaffForm(props: StaffFormProps) {
   const existing = useStaffMember(isEdit ? props.staffId : null);
   const { mutate: createStaff, isPending: isCreating, error: createError } = useCreateStaff();
   const { mutate: updateStaff, isPending: isUpdating, error: updateError } = useUpdateStaff();
+
+  useBreadcrumbLabel(
+    isEdit ? props.staffId : undefined,
+    existing.data ? staffFullName(existing.data) : undefined,
+  );
 
   const classroomDirectory = useClassroomDirectory();
   const membershipDirectory = useMembershipDirectory(true);

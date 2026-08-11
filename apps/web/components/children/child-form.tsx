@@ -2,10 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
+import { fullName } from '@/lib/children/mapper';
 import { useCreateChild, useUpdateChild } from '@/lib/children/mutations';
 import { useChild } from '@/lib/children/queries';
 import {
@@ -23,6 +25,11 @@ export function ChildForm(props: ChildFormProps) {
   const existing = useChild(isEdit ? props.childId : null);
   const { mutate: createChild, isPending: isCreating, error: createError } = useCreateChild();
   const { mutate: updateChild, isPending: isUpdating, error: updateError } = useUpdateChild();
+
+  useBreadcrumbLabel(
+    isEdit ? props.childId : undefined,
+    existing.data ? fullName(existing.data) : undefined,
+  );
 
   const [values, setValues] = useState<ChildFormValues>(emptyChildFormValues);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ChildFormValues, string>>>(

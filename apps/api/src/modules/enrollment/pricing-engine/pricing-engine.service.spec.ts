@@ -6,6 +6,7 @@ import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/en
 import { PlanFeeService } from '../plan-fee/plan-fee.service';
 import { PlanPriceService } from '../plan-price/plan-price.service';
 import { SiblingDiscountTierService } from '../sibling-discount-tier/sibling-discount-tier.service';
+import { BillingTermsUnresolvedError } from './billing-terms-unresolved.error';
 import { PricingEngineService } from './pricing-engine.service';
 
 const D = (value: number) => new Prisma.Decimal(value);
@@ -106,24 +107,35 @@ describe('PricingEngineService', () => {
       ]);
     });
 
-    it('throws when no effective EnrollmentBillingTerms exists for the period', async () => {
+    it('throws BillingTermsUnresolvedError when no effective EnrollmentBillingTerms exists for the period', async () => {
       billingTerms.findEffectiveForChildAndPeriod.mockResolvedValue(null);
 
-      await expect(
-        service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30'),
-      ).rejects.toThrow(/no effective EnrollmentBillingTerms/);
+      const promise = service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
+      await expect(promise).rejects.toThrow(BillingTermsUnresolvedError);
+      await expect(promise).rejects.toThrow(/no effective EnrollmentBillingTerms/);
     });
 
-    it('throws when billing terms have neither customRateAmount nor planId', async () => {
+    it('throws BillingTermsUnresolvedError when billing terms have neither customRateAmount nor planId', async () => {
       billingTerms.findEffectiveForChildAndPeriod.mockResolvedValue({
         ...baseTerms,
         planId: null,
         customRateAmount: null,
       } as never);
 
+      const promise = service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30');
+      await expect(promise).rejects.toThrow(BillingTermsUnresolvedError);
+      await expect(promise).rejects.toThrow(/neither customRateAmount nor planId/);
+    });
+
+    it('does not throw BillingTermsUnresolvedError for the sibling-tier gap (Gap #2, deliberately untouched)', async () => {
+      billingTerms.countEligibleSiblings.mockResolvedValue(2);
+      siblingDiscountTier.findEffective.mockResolvedValue([
+        { siblingCountThreshold: 2, discountPercentage: D(10) },
+      ] as never);
+
       await expect(
         service.computeChargesForPeriod('tenant-1', 'child-1', '2026-09-01', '2026-09-30'),
-      ).rejects.toThrow(/neither customRateAmount nor planId/);
+      ).rejects.not.toBeInstanceOf(BillingTermsUnresolvedError);
     });
   });
 

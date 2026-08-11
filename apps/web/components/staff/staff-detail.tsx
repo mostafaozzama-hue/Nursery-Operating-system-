@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
@@ -25,6 +26,8 @@ export function StaffDetail({ staffId }: { staffId: string }) {
     useMembershipDirectory(canManage);
   const { mutate: deleteStaff, isPending: isDeleting } = useDeleteStaff();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useBreadcrumbLabel(staffId, data ? staffFullName(data) : undefined);
 
   const handleConfirmDelete = async () => {
     try {

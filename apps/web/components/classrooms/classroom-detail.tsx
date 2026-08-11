@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { ClassroomChildrenSection } from '@/components/enrollments/classroom-children-section';
 import { ClassroomStaffSection } from '@/components/staff/classroom-staff-section';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
@@ -20,6 +21,8 @@ export function ClassroomDetail({ classroomId }: { classroomId: string }) {
   const { data, isLoading, error, refetch } = useClassroom(classroomId);
   const { mutate: deleteClassroom, isPending: isDeleting } = useDeleteClassroom();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useBreadcrumbLabel(classroomId, data ? data.name : undefined);
 
   const handleConfirmDelete = async () => {
     try {

@@ -24,6 +24,7 @@ import {
   type FeeFormValues,
 } from '@/lib/fees/schema';
 import { FEE_TYPES, type FeeType } from '@nursery-os/contracts';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { ConfigurationSectionHeader } from '../configuration-section-header';
 
 type FeeFormProps = { mode: 'create' } | { mode: 'edit'; feeId: string };
@@ -47,6 +48,11 @@ type FeeFormProps = { mode: 'create' } | { mode: 'edit'; feeId: string };
 export function FeeForm(props: FeeFormProps) {
   const isEdit = props.mode === 'edit';
   const existing = useFee(isEdit ? props.feeId : null);
+
+  useBreadcrumbLabel(
+    isEdit ? props.feeId : undefined,
+    existing.data ? existing.data.name : undefined,
+  );
 
   if (isEdit && existing.isLoading) {
     return <p>Loading…</p>;

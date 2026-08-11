@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
@@ -28,6 +29,8 @@ export function PayrollDetail({ payrollId }: { payrollId: string }) {
   const staffResult = useStaffMember(canManage ? (data?.staffId ?? null) : null);
   const { mutate: deletePayroll, isPending: isDeleting } = useDeletePayroll();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useBreadcrumbLabel(payrollId, staffResult.data ? staffFullName(staffResult.data) : undefined);
 
   if (!canManage) {
     return <p className="text-muted-foreground">You don&apos;t have access to payroll records.</p>;

@@ -34,6 +34,7 @@ import {
   type PlanDayOfWeek,
 } from '@nursery-os/contracts';
 import { cn } from '@/lib/utils';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { ConfigurationSectionHeader } from '../configuration-section-header';
 
 type PlanFormProps = { mode: 'create' } | { mode: 'edit'; planId: string };
@@ -59,6 +60,11 @@ type PlanFormProps = { mode: 'create' } | { mode: 'edit'; planId: string };
 export function PlanForm(props: PlanFormProps) {
   const isEdit = props.mode === 'edit';
   const existing = usePlan(isEdit ? props.planId : null);
+
+  useBreadcrumbLabel(
+    isEdit ? props.planId : undefined,
+    existing.data ? existing.data.name : undefined,
+  );
 
   if (isEdit && existing.isLoading) {
     return <p>Loading…</p>;

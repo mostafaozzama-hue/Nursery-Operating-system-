@@ -19,6 +19,7 @@ import { useChildDirectory } from '@/lib/children/queries';
 import { INVOICE_STATUS_BADGE_VARIANT, INVOICE_STATUS_LABEL } from '@/lib/invoices/mapper';
 import { useInvoicesForBillingRun } from '@/lib/invoices/queries';
 import { formatMoney } from '@/lib/money';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { PageTitle } from '@/components/layout/page-title';
 import type { Invoice } from '@nursery-os/contracts';
 
@@ -36,6 +37,13 @@ export function BillingRunDetail({ billingRunId }: { billingRunId: string }) {
   const { data, isLoading, error, refetch } = useBillingRun(canManage ? billingRunId : null);
   const invoices = useInvoicesForBillingRun(canManage ? billingRunId : null);
   const { byId: childrenById, isLoading: childrenLoading } = useChildDirectory();
+
+  useBreadcrumbLabel(
+    billingRunId,
+    data
+      ? `${formatBillingRunDate(data.periodStart)} – ${formatBillingRunDate(data.periodEnd)}`
+      : undefined,
+  );
 
   if (!canManage) {
     return <p className="text-muted-foreground">You don&apos;t have access to billing runs.</p>;

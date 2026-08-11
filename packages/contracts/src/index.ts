@@ -12,6 +12,7 @@ export * from './payroll/types';
 export * from './attendance/types';
 export * from './invoices/types';
 export * from './payments/types';
+export * from './payment-allocations/types';
 export * from './plans/types';
 export * from './fees/types';
 export * from './discounts/types';

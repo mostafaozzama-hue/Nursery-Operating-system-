@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Badge } from '@/components/common/badge';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth';
@@ -27,6 +28,14 @@ export function AttendanceDetail({ attendanceId }: { attendanceId: string }) {
   // Gated behind canManage, same reasoning as StaffDetail - GET /memberships 403s for STAFF.
   const { byId: membershipsById, isLoading: membershipsLoading } =
     useMembershipDirectory(canManage);
+
+  const breadcrumbChild = data ? childrenById.get(data.childId) : undefined;
+  useBreadcrumbLabel(
+    attendanceId,
+    data
+      ? `${breadcrumbChild ? fullName(breadcrumbChild) : 'Attendance record'} · ${formatAttendanceDate(data.date)}`
+      : undefined,
+  );
 
   const isLoadingAny =
     isLoading || childrenLoading || classroomsLoading || (canManage && membershipsLoading);

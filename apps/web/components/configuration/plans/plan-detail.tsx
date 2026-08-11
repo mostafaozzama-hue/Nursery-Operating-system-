@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Badge } from '@/components/common/badge';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
@@ -25,6 +26,8 @@ export function PlanDetail({ planId }: { planId: string }) {
   const { mutate: activatePlan, isPending: isActivating } = useActivatePlan();
   const { mutate: deactivatePlan, isPending: isDeactivating } = useDeactivatePlan();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useBreadcrumbLabel(planId, data ? data.name : undefined);
 
   const handleActivate = async () => {
     try {

@@ -1,5 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
+import { Logger } from 'nestjs-pino';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { translateNotFound } from '../../../common/errors/translate-not-found';
 import { buildPaginatedResult } from '../../../common/pagination/pagination.util';
@@ -11,6 +12,7 @@ import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
 // EnrollmentRepository's identical comment for the root cause.
 import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { InvoiceService } from '../invoice/invoice.service';
+import { BillingTermsUnresolvedError } from '../pricing-engine/billing-terms-unresolved.error';
 import { PricingEngineService } from '../pricing-engine/pricing-engine.service';
 import { BillingRunConflictError } from './billing-run-conflict.error';
 import { BillingRunQueryDto } from './dto/billing-run-query.dto';
@@ -28,6 +30,7 @@ export class BillingRunService {
     private readonly invoice: InvoiceService,
     private readonly currentTenant: CurrentTenantProvider,
     private readonly currentUser: CurrentUserProvider,
+    private readonly logger: Logger,
   ) {}
 
   generateForPeriod(dto: CreateBillingRunDto) {
@@ -60,15 +63,32 @@ export class BillingRunService {
       try {
         // EXPLICIT: each child's regeneration is its own separate
         // transaction - a failure on one child never rolls back another's
-        // already-generated invoice.
+        // already-generated invoice. computeChargesForPeriod throws before
+        // any invoice write happens for either Gap #1 case, so a failed
+        // child never receives a wrong or partial invoice.
         await this.repository.runInTransaction(tenantId, (tx) =>
           this.regenerateInvoiceForChild(tx, tenantId, childId, periodStart, periodEnd, triggeredBy),
         );
-      } catch {
+      } catch (error) {
         // Failure detail is not persisted beyond the aggregate status -
         // confirmed via ADR-0017's explicit rejection of a BillingRunEvent
-        // audit entity. Logged by the framework's own error handling, not a
-        // stored, queryable record.
+        // audit entity; not reopened here (MVP Freeze Review, Milestone 1).
+        // The two cases are still distinguished at the log level only: an
+        // unresolved-billing-terms child is an expected, anticipated
+        // billing exception (warn), anything else is a genuine, unexpected
+        // fault (error) - both still mark the run PARTIAL_FAILURE and both
+        // let the loop continue to the next child.
+        if (error instanceof BillingTermsUnresolvedError) {
+          this.logger.warn(
+            { tenantId, childId, periodStart, periodEnd, err: error },
+            'BillingRunService: child skipped - billing terms unresolved',
+          );
+        } else {
+          this.logger.error(
+            { tenantId, childId, periodStart, periodEnd, err: error },
+            'BillingRunService: unexpected error regenerating invoice for child',
+          );
+        }
         anyFailed = true;
       }
     }

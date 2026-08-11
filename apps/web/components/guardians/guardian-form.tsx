@@ -2,10 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
+import { fullName } from '@/lib/guardians/mapper';
 import { useCreateGuardian, useUpdateGuardian } from '@/lib/guardians/mutations';
 import { useGuardian } from '@/lib/guardians/queries';
 import {
@@ -23,6 +25,11 @@ export function GuardianForm(props: GuardianFormProps) {
   const existing = useGuardian(isEdit ? props.guardianId : null);
   const { mutate: createGuardian, isPending: isCreating, error: createError } = useCreateGuardian();
   const { mutate: updateGuardian, isPending: isUpdating, error: updateError } = useUpdateGuardian();
+
+  useBreadcrumbLabel(
+    isEdit ? props.guardianId : undefined,
+    existing.data ? fullName(existing.data) : undefined,
+  );
 
   const [values, setValues] = useState<GuardianFormValues>(emptyGuardianFormValues);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof GuardianFormValues, string>>>(

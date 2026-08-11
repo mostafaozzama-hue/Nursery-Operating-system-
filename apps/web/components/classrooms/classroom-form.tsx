@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +32,11 @@ export function ClassroomForm(props: ClassroomFormProps) {
     isPending: isUpdating,
     error: updateError,
   } = useUpdateClassroom();
+
+  useBreadcrumbLabel(
+    isEdit ? props.classroomId : undefined,
+    existing.data ? existing.data.name : undefined,
+  );
 
   const [values, setValues] = useState<ClassroomFormValues>(emptyClassroomFormValues);
   const [fieldErrors, setFieldErrors] = useState<

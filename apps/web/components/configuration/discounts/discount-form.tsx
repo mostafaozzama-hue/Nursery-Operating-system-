@@ -29,6 +29,7 @@ import {
   type DiscountScope,
   type DiscountType,
 } from '@nursery-os/contracts';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { ConfigurationSectionHeader } from '../configuration-section-header';
 
 type DiscountFormProps = { mode: 'create' } | { mode: 'edit'; discountId: string };
@@ -51,6 +52,11 @@ type DiscountFormProps = { mode: 'create' } | { mode: 'edit'; discountId: string
 export function DiscountForm(props: DiscountFormProps) {
   const isEdit = props.mode === 'edit';
   const existing = useDiscount(isEdit ? props.discountId : null);
+
+  useBreadcrumbLabel(
+    isEdit ? props.discountId : undefined,
+    existing.data ? existing.data.name : undefined,
+  );
 
   if (isEdit && existing.isLoading) {
     return <p>Loading…</p>;

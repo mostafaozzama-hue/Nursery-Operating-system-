@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChildPicker } from '@/components/child-guardians/child-picker';
 import { GuardianPicker } from '@/components/child-guardians/guardian-picker';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +29,12 @@ export function InvoiceEditForm({ invoiceId }: { invoiceId: string }) {
   const { mutate: updateInvoice, isPending, error: submitError } = useUpdateInvoice();
   const { byId: childrenById } = useChildDirectory();
   const { byId: guardiansById } = useGuardianDirectory();
+
+  const breadcrumbChild = existing.data ? childrenById.get(existing.data.childId) : undefined;
+  useBreadcrumbLabel(
+    invoiceId,
+    existing.data ? (breadcrumbChild ? childFullName(breadcrumbChild) : 'Invoice') : undefined,
+  );
 
   const [values, setValues] = useState<InvoiceFormValues>(emptyInvoiceFormValues);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof InvoiceFormValues, string>>>(

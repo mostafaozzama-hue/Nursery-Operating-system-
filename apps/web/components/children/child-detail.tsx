@@ -8,6 +8,7 @@ import { FeeAssignmentsSection } from '@/components/child-fee-assignments/fee-as
 import { LinkedGuardiansSection } from '@/components/child-guardians/linked-guardians-section';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { EnrollmentSection } from '@/components/enrollments/enrollment-section';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { WaiversSection } from '@/components/waivers/waivers-section';
@@ -24,6 +25,8 @@ export function ChildDetail({ childId }: { childId: string }) {
   const { data, isLoading, error, refetch } = useChild(childId);
   const { mutate: deleteChild, isPending: isDeleting } = useDeleteChild();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useBreadcrumbLabel(childId, data ? fullName(data) : undefined);
 
   const handleConfirmDelete = async () => {
     try {

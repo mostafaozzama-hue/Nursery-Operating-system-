@@ -12,6 +12,7 @@ import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/en
 import { PlanFeeService } from '../plan-fee/plan-fee.service';
 import { PlanPriceService } from '../plan-price/plan-price.service';
 import { SiblingDiscountTierService } from '../sibling-discount-tier/sibling-discount-tier.service';
+import { BillingTermsUnresolvedError } from './billing-terms-unresolved.error';
 import { ComputeChargesResult, LineItemDraft } from './line-item-draft.type';
 
 const ZERO = new Prisma.Decimal(0);
@@ -38,11 +39,13 @@ export class PricingEngineService {
   ): Promise<ComputeChargesResult> {
     const terms = await this.billingTerms.findEffectiveForChildAndPeriod(tenantId, childId, periodStart, periodEnd, tx);
     if (!terms) {
-      // Neither frozen document defines what a child with no effective
-      // EnrollmentBillingTerms for this period should produce - a genuine
-      // business-rule gap, not decided here. Stopping at the exact point
-      // the missing rule is required, per explicit instruction.
-      throw new Error(
+      // Gap #1 (MVP Freeze Review, docs/SESSION_CHECKPOINT.md §3): a child
+      // with no resolvable billing terms must never receive an invented
+      // price. A dedicated error type, not a plain Error, so
+      // BillingRunService can treat this as an expected billing exception
+      // (log at warn, keep the run going) rather than an unexpected crash
+      // (log at error) - see BillingTermsUnresolvedError's own doc comment.
+      throw new BillingTermsUnresolvedError(
         `PricingEngineService.computeChargesForPeriod: no effective EnrollmentBillingTerms for child ${childId} in period ${periodStart}..${periodEnd}`,
       );
     }
@@ -64,9 +67,9 @@ export class PricingEngineService {
       planPriceId = price.id;
     } else {
       // Billing terms exist, but neither customRateAmount nor planId can
-      // produce a tuition amount - same treatment as the missing-terms case
-      // above: a genuine, undefined business-rule gap, not decided here.
-      throw new Error(
+      // produce a tuition amount - same Gap #1 treatment as the
+      // missing-terms case above, same dedicated error type.
+      throw new BillingTermsUnresolvedError(
         `PricingEngineService.computeChargesForPeriod: EnrollmentBillingTerms ${terms.id} has neither customRateAmount nor planId`,
       );
     }

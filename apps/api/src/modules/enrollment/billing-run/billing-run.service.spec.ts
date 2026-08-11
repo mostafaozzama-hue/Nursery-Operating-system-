@@ -1,9 +1,11 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { EntityNotFoundError } from '../../../common/errors/entity-not-found.error';
 import { CurrentUserProvider } from '../../identity/current-user.provider';
 import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
 import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { InvoiceService } from '../invoice/invoice.service';
+import { BillingTermsUnresolvedError } from '../pricing-engine/billing-terms-unresolved.error';
 import { PricingEngineService } from '../pricing-engine/pricing-engine.service';
 import { BillingRunConflictError } from './billing-run-conflict.error';
 import { BillingRunRepository } from './billing-run.repository';
@@ -16,6 +18,7 @@ describe('BillingRunService', () => {
   let invoice: jest.Mocked<InvoiceService>;
   let currentTenant: jest.Mocked<CurrentTenantProvider>;
   let currentUser: jest.Mocked<CurrentUserProvider>;
+  let logger: jest.Mocked<Logger>;
   let service: BillingRunService;
 
   const billingRun = { id: 'run-1', tenantId: 'tenant-1', status: 'COMPLETED' };
@@ -47,8 +50,9 @@ describe('BillingRunService', () => {
 
     currentTenant = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as unknown as jest.Mocked<CurrentTenantProvider>;
     currentUser = { getUserId: jest.fn().mockReturnValue('user-1') } as unknown as jest.Mocked<CurrentUserProvider>;
+    logger = { warn: jest.fn(), error: jest.fn() } as unknown as jest.Mocked<Logger>;
 
-    service = new BillingRunService(repository, billingTerms, pricingEngine, invoice, currentTenant, currentUser);
+    service = new BillingRunService(repository, billingTerms, pricingEngine, invoice, currentTenant, currentUser, logger);
   });
 
   describe('generateForPeriod', () => {
@@ -80,13 +84,13 @@ describe('BillingRunService', () => {
       expect(invoice.replaceGeneratedLines).toHaveBeenCalledWith('tx', 'tenant-1', 'existing-invoice', [], 'user-1');
     });
 
-    it('marks PARTIAL_FAILURE when one eligible child fails, without stopping the others', async () => {
+    it('marks PARTIAL_FAILURE and logs at warn when a child has unresolved billing terms (Gap #1, expected exception), without stopping the others', async () => {
       billingTerms.findChildrenWithEffectiveTermsForPeriod.mockResolvedValue([
         { childId: 'child-1' },
         { childId: 'child-2' },
       ] as never);
       pricingEngine.computeChargesForPeriod
-        .mockRejectedValueOnce(new Error('no effective EnrollmentBillingTerms'))
+        .mockRejectedValueOnce(new BillingTermsUnresolvedError('no effective EnrollmentBillingTerms'))
         .mockResolvedValueOnce({ billedToGuardianId: 'guardian-1', drafts: [] });
 
       const result = await service.generateForPeriod({ periodStart: '2026-09-01', periodEnd: '2026-09-30' });
@@ -94,6 +98,41 @@ describe('BillingRunService', () => {
       expect(pricingEngine.computeChargesForPeriod).toHaveBeenCalledTimes(2);
       expect(repository.updateStatus).toHaveBeenCalledWith('tenant-1', 'run-1', 'PARTIAL_FAILURE', 'user-1');
       expect(result.status).toBe('PARTIAL_FAILURE');
+      // Expected billing exception -> warn, never error.
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'tenant-1', childId: 'child-1' }),
+        expect.stringContaining('billing terms unresolved'),
+      );
+      expect(logger.error).not.toHaveBeenCalled();
+      // The failed child never gets an invoice write; the succeeding child does.
+      expect(invoice.createComposable).toHaveBeenCalledTimes(1);
+      expect(invoice.createComposable).toHaveBeenCalledWith(
+        'tx',
+        'tenant-1',
+        { childId: 'child-2', billedToGuardianId: 'guardian-1', billingRunId: 'run-1' },
+        'user-1',
+      );
+    });
+
+    it('marks PARTIAL_FAILURE and logs at error when a child fails for an unexpected reason, without stopping the others', async () => {
+      billingTerms.findChildrenWithEffectiveTermsForPeriod.mockResolvedValue([
+        { childId: 'child-1' },
+        { childId: 'child-2' },
+      ] as never);
+      pricingEngine.computeChargesForPeriod
+        .mockRejectedValueOnce(new Error('unexpected database timeout'))
+        .mockResolvedValueOnce({ billedToGuardianId: 'guardian-1', drafts: [] });
+
+      const result = await service.generateForPeriod({ periodStart: '2026-09-01', periodEnd: '2026-09-30' });
+
+      expect(repository.updateStatus).toHaveBeenCalledWith('tenant-1', 'run-1', 'PARTIAL_FAILURE', 'user-1');
+      expect(result.status).toBe('PARTIAL_FAILURE');
+      // Unexpected fault -> error, never warn.
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'tenant-1', childId: 'child-1' }),
+        expect.stringContaining('unexpected error'),
+      );
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('throws a 409 when the run already has invoices and none are still DRAFT', async () => {

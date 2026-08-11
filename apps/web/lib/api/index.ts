@@ -15,6 +15,7 @@ import { holidays } from './endpoints/holidays';
 import { invoices } from './endpoints/invoices';
 import { memberships } from './endpoints/memberships';
 import { oneTimeCharges } from './endpoints/one-time-charges';
+import { paymentAllocations } from './endpoints/payment-allocations';
 import { payments } from './endpoints/payments';
 import { payroll } from './endpoints/payroll';
 import { planFees } from './endpoints/plan-fees';
@@ -37,6 +38,7 @@ export const api = {
   attendance,
   invoices,
   payments,
+  paymentAllocations,
   plans,
   planPrices,
   planFees,

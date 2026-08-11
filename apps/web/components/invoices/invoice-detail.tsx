@@ -6,6 +6,7 @@ import { Badge } from '@/components/common/badge';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { EmptyState } from '@/components/common/empty-state';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,6 +45,12 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
   const { byId: guardiansById, isLoading: guardiansLoading } = useGuardianDirectory();
   const lineItems = useInvoiceLineItems(invoiceId);
   const payments = useInvoicePayments(invoiceId);
+
+  const breadcrumbChild = data ? childrenById.get(data.childId) : undefined;
+  useBreadcrumbLabel(
+    invoiceId,
+    data ? (breadcrumbChild ? childFullName(breadcrumbChild) : 'Invoice') : undefined,
+  );
 
   const { mutate: issueInvoice, isPending: isIssuing, error: issueError } = useIssueInvoice();
   const { mutate: voidInvoice, isPending: isVoiding } = useVoidInvoice();

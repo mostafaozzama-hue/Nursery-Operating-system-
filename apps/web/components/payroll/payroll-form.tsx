@@ -4,6 +4,7 @@ import type { Staff } from '@nursery-os/contracts';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { StaffPicker } from '@/components/payroll/staff-picker';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -47,6 +48,11 @@ export function PayrollForm(props: PayrollFormProps) {
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   const [showStaffPicker, setShowStaffPicker] = useState(false);
   const existingStaff = useStaffMember(!isEdit || staffId === null ? null : staffId);
+
+  useBreadcrumbLabel(
+    isEdit ? props.payrollId : undefined,
+    existingStaff.data ? staffFullName(existingStaff.data) : undefined,
+  );
 
   useEffect(() => {
     if (isEdit && existing.data) {

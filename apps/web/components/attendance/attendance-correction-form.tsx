@@ -4,12 +4,13 @@ import type { Classroom } from '@nursery-os/contracts';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ClassroomPicker } from '@/components/classrooms/classroom-picker';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
 import { useClassroomDirectory } from '@/lib/classrooms/queries';
-import { toTimeInputValue } from '@/lib/attendance/mapper';
+import { formatAttendanceDate, toTimeInputValue } from '@/lib/attendance/mapper';
 import { useAttendanceRecord } from '@/lib/attendance/queries';
 import { useUpdateAttendance } from '@/lib/attendance/mutations';
 import {
@@ -24,6 +25,14 @@ export function AttendanceCorrectionForm({ attendanceId }: { attendanceId: strin
   const existing = useAttendanceRecord(attendanceId);
   const { mutate: updateAttendance, isPending, error: submitError } = useUpdateAttendance();
   const classroomDirectory = useClassroomDirectory();
+
+  // No child directory fetched on this form (unlike AttendanceDetail) - the
+  // breadcrumb label here is date-only rather than adding a new network
+  // request just to match Detail's fuller "child · date" label.
+  useBreadcrumbLabel(
+    attendanceId,
+    existing.data ? `Attendance · ${formatAttendanceDate(existing.data.date)}` : undefined,
+  );
 
   const [values, setValues] = useState<AttendanceCorrectionValues>({
     classroomId: '',
