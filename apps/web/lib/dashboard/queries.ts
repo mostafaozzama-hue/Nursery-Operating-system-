@@ -72,7 +72,7 @@ export function useDashboardOverview(canManage: boolean): DashboardOverviewResul
     const today = todayLocalDate();
 
     Promise.all([
-      api.enrollments.list({ status: 'ACTIVE', pageSize: 100 }),
+      api.enrollments.list({ status: 'ACTIVE', open: true, pageSize: 100 }),
       api.enrollments.list({ status: 'WAITLISTED', pageSize: 1 }),
       api.staff.list({ pageSize: 100 }),
       api.classrooms.list({ pageSize: 100 }),
