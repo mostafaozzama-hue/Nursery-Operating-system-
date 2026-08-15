@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Roles } from './decorators/roles.decorator';
@@ -26,6 +27,7 @@ export class IdentityController {
   ) {}
 
   @Post('register')
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Register a new tenant and its first OWNER user' })
   @ApiResponse({ status: 201, type: CurrentUserResponseDto })
   @ApiResponse({ status: 409, description: 'Email already in use' })
@@ -37,6 +39,7 @@ export class IdentityController {
   }
 
   @Post('login')
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Log in and receive session cookies' })
   @ApiResponse({ status: 200, type: CurrentUserResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid credentials or no active tenant access' })
@@ -88,6 +91,7 @@ export class IdentityController {
   }
 
   @Post('forgot-password')
+  @UseGuards(ThrottlerGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Request a password reset - always responds the same way regardless of whether the email exists' })
   @ApiResponse({ status: 204 })

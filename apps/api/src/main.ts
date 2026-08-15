@@ -6,12 +6,26 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
-import { EnvironmentVariables } from './config/environment-variables';
+import { EnvironmentVariables, NodeEnv } from './config/environment-variables';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
+
+  // Security review Pass 2 (S3): production deploys behind exactly one
+  // reverse-proxy hop (see the CORS comment below). Without this, Express's
+  // default req.ip is the proxy's own address for every request - the S2
+  // auth rate limiter (ThrottlerGuard, identity.controller.ts) tracks by
+  // req.ip, so it would throttle all users behind that proxy as one shared
+  // bucket instead of per real client. Setting trust proxy to the number 1
+  // (not `true`) makes Express derive req.ip from the single trusted hop of
+  // X-Forwarded-For and nothing further back - a client can't spoof extra
+  // hops onto the front of that header to impersonate a different proxy,
+  // the way an unbounded `true` would allow. Not on INestApplication's own
+  // interface - Express's underlying instance is the only thing this
+  // setting exists on.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   const configService = app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
 
@@ -55,16 +69,21 @@ async function bootstrap() {
   // upgrade that changes how Swagger serves its assets) only ever needs to
   // touch the /docs-scoped one, never the real API's policy.
   app.use(helmet(helmetOptions));
-  app.use('/docs', helmet(helmetOptions));
 
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );
 
-  const swaggerConfig = new DocumentBuilder().setTitle('Nursery OS API').setVersion('0.0.0').build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  // Security review Pass 2 (S1): the API schema (every route/DTO/field name)
+  // is real reconnaissance value handed to anyone who can reach the API -
+  // only worth exposing outside production, where it's a development aid.
+  if (configService.get('NODE_ENV', { infer: true }) !== NodeEnv.Production) {
+    app.use('/docs', helmet(helmetOptions));
+    const swaggerConfig = new DocumentBuilder().setTitle('Nursery OS API').setVersion('0.0.0').build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   await app.listen(configService.get('PORT', { infer: true }));
 }
