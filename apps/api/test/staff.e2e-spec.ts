@@ -90,18 +90,24 @@ describe('Staff module (e2e)', () => {
   }
 
   it('rejects an unauthenticated create', async () => {
-    const res = await request(app.getHttpServer()).post('/staff').send({ position: 'Teacher' });
+    const res = await request(app.getHttpServer())
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher' });
     expect(res.status).toBe(401);
   });
 
   it('forbids STAFF from creating a staff record (403), but allows STAFF to read', async () => {
     const ownerAgent = await loginAs(ownerAEmail);
-    const createRes = await ownerAgent.post('/staff').send({ position: 'Teacher' });
+    const createRes = await ownerAgent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher' });
     expect(createRes.status).toBe(201);
     createdStaffIds.push(createRes.body.id);
 
     const staffAgent = await loginAs(staffAEmail);
-    const forbiddenCreateRes = await staffAgent.post('/staff').send({ position: 'Assistant' });
+    const forbiddenCreateRes = await staffAgent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Assistant' });
     expect(forbiddenCreateRes.status).toBe(403);
 
     const readListRes = await staffAgent.get('/staff?pageSize=100');
@@ -111,15 +117,17 @@ describe('Staff module (e2e)', () => {
     expect(readOneRes.status).toBe(200);
   });
 
-  it('allows creating a staff record with only some fields set (no required-field pair)', async () => {
+  it('allows creating a staff record with only the required name fields set', async () => {
     const agent = await loginAs(ownerAEmail);
 
-    const bareRes = await agent.post('/staff').send({});
+    const bareRes = await agent.post('/staff').send({ firstName: 'Bare', lastName: 'Staff' });
     expect(bareRes.status).toBe(201);
     expect(bareRes.body.position).toBeNull();
     createdStaffIds.push(bareRes.body.id);
 
-    const withPositionRes = await agent.post('/staff').send({ position: 'Cook', hireDate: '2024-09-01' });
+    const withPositionRes = await agent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Cook', hireDate: '2024-09-01' });
     expect(withPositionRes.status).toBe(201);
     expect(withPositionRes.body.position).toBe('Cook');
     createdStaffIds.push(withPositionRes.body.id);
@@ -130,11 +138,15 @@ describe('Staff module (e2e)', () => {
     const agentB = await loginAs(ownerBEmail);
     const classroomBId = await createClassroom(agentB, 'Tenant B Room');
 
-    const crossTenantRes = await agentA.post('/staff').send({ position: 'Teacher', classroomId: classroomBId });
+    const crossTenantRes = await agentA
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher', classroomId: classroomBId });
     expect(crossTenantRes.status).toBe(404);
 
     const classroomAId = await createClassroom(agentA, 'Tenant A Room');
-    const validRes = await agentA.post('/staff').send({ position: 'Teacher', classroomId: classroomAId });
+    const validRes = await agentA
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher', classroomId: classroomAId });
     expect(validRes.status).toBe(201);
     expect(validRes.body.classroomId).toBe(classroomAId);
     expect(validRes.body.createdBy).toBe(ownerAId);
@@ -143,19 +155,25 @@ describe('Staff module (e2e)', () => {
 
   it('rejects linking userId to a user with no membership in this tenant', async () => {
     const agent = await loginAs(ownerAEmail);
-    const res = await agent.post('/staff').send({ position: 'Teacher', userId: unaffiliatedUserId });
+    const res = await agent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher', userId: unaffiliatedUserId });
     expect(res.status).toBe(400);
   });
 
   it('rejects linking userId to a user whose membership is not ACTIVE', async () => {
     const agent = await loginAs(ownerAEmail);
-    const res = await agent.post('/staff').send({ position: 'Teacher', userId: invitedUserId });
+    const res = await agent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher', userId: invitedUserId });
     expect(res.status).toBe(400);
   });
 
   it('rejects linking userId to a nonexistent user (404)', async () => {
     const agent = await loginAs(ownerAEmail);
     const res = await agent.post('/staff').send({
+      firstName: 'E2E',
+      lastName: 'Staff',
       position: 'Teacher',
       userId: '00000000-0000-0000-0000-000000000000',
     });
@@ -164,18 +182,24 @@ describe('Staff module (e2e)', () => {
 
   it('allows linking userId to a user with an active membership, and rejects a second staff record linking the same user', async () => {
     const agent = await loginAs(ownerAEmail);
-    const firstRes = await agent.post('/staff').send({ position: 'Teacher', userId: ownerAId });
+    const firstRes = await agent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher', userId: ownerAId });
     expect(firstRes.status).toBe(201);
     expect(firstRes.body.userId).toBe(ownerAId);
     createdStaffIds.push(firstRes.body.id);
 
-    const secondRes = await agent.post('/staff').send({ position: 'Assistant', userId: ownerAId });
+    const secondRes = await agent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Assistant', userId: ownerAId });
     expect(secondRes.status).toBe(409);
   });
 
   it('allows re-submitting the same userId on update without a false self-conflict', async () => {
     const agent = await loginAs(ownerAEmail);
-    const createRes = await agent.post('/staff').send({ position: 'Cook', userId: staffAId });
+    const createRes = await agent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Cook', userId: staffAId });
     expect(createRes.status).toBe(201);
     createdStaffIds.push(createRes.body.id);
 
@@ -189,7 +213,7 @@ describe('Staff module (e2e)', () => {
 
   it('gets a staff record by id, 404s for unknown id', async () => {
     const agent = await loginAs(ownerAEmail);
-    const createRes = await agent.post('/staff').send({ position: 'Teacher' });
+    const createRes = await agent.post('/staff').send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher' });
     createdStaffIds.push(createRes.body.id);
 
     const okRes = await agent.get(`/staff/${createRes.body.id}`);
@@ -202,7 +226,9 @@ describe('Staff module (e2e)', () => {
   it('lists, filters by classroomId and position, and sorts', async () => {
     const agent = await loginAs(ownerAEmail);
     const classroomId = await createClassroom(agent, 'Filter Room');
-    const createRes = await agent.post('/staff').send({ position: 'Librarian', classroomId });
+    const createRes = await agent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Librarian', classroomId });
     createdStaffIds.push(createRes.body.id);
 
     const byClassroomRes = await agent.get(`/staff?classroomId=${classroomId}`);
@@ -221,7 +247,9 @@ describe('Staff module (e2e)', () => {
 
   it('forbids STAFF from updating; OWNER can update and records updatedBy', async () => {
     const ownerAgent = await loginAs(ownerAEmail);
-    const createRes = await ownerAgent.post('/staff').send({ position: 'Teacher' });
+    const createRes = await ownerAgent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Teacher' });
     createdStaffIds.push(createRes.body.id);
 
     const staffAgent = await loginAs(staffAEmail);
@@ -236,7 +264,9 @@ describe('Staff module (e2e)', () => {
 
   it('forbids STAFF from deleting; OWNER can soft-delete and it then 404s', async () => {
     const ownerAgent = await loginAs(ownerAEmail);
-    const createRes = await ownerAgent.post('/staff').send({ position: 'ToDelete' });
+    const createRes = await ownerAgent
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'ToDelete' });
     createdStaffIds.push(createRes.body.id);
 
     const staffAgent = await loginAs(staffAEmail);
@@ -252,7 +282,9 @@ describe('Staff module (e2e)', () => {
 
   it("tenant B cannot see, fetch, or modify tenant A's staff records (RLS isolation)", async () => {
     const agentA = await loginAs(ownerAEmail);
-    const createRes = await agentA.post('/staff').send({ position: 'Isolated' });
+    const createRes = await agentA
+      .post('/staff')
+      .send({ firstName: 'E2E', lastName: 'Staff', position: 'Isolated' });
     createdStaffIds.push(createRes.body.id);
     const staffId = createRes.body.id;
 
