@@ -1,67 +1,48 @@
 # Session Checkpoint
 
-- **Saved:** 2026-07-20
-- **Purpose:** Resume point for the next session. Read this before continuing Identity/Classroom work.
+- **Saved:** 2026-07-29
+- **Purpose:** Backend Services design for the Configuration Engine is complete, reviewed, corrected, and **approved and frozen for implementation** — see [backend-services-freeze.md](./architecture/backend-services-freeze.md). Domain model, Information Architecture, wireframes, and the Configuration Engine database foundation are all frozen and committed. **Next phase: Backend Services implementation, starting with `PlanService`.**
+- **Branch:** `sprint-11-frontend-foundation`, 5 commits ahead of `origin/sprint-11-frontend-foundation` (not pushed).
+- **Latest commit:** `686e189` — "feat(database): implement configuration engine foundation".
+- **Open PR:** [#1 — Sprint 11: Frontend foundation through Billing & Payments](https://github.com/mostafaozzama-hue/Nursery-Operating-system-/pull/1), `sprint-11-frontend-foundation` → `main`, mergeable, awaiting review. Not merged.
 
-## Git commit history
+---
 
-Branch `main`, 13 commits ahead of `origin/main` (nothing pushed yet). Working tree is clean — nothing staged, nothing modified.
+## 1. Status summary
 
-```
-56bb63e test(api): add Identity unit and e2e test suite
-cada321 feat(api): retrofit Classroom with real auth guards and createdBy/updatedBy
-4254948 feat(api): implement Identity authentication (JWT login, refresh rotation, guards, RBAC)
-747cda7 fix(database): apply RLS policy migration
-aef0f7c feat(database): add self-access RLS policy for tenant_memberships login lookup
-10be6f3 feat(api): implement Classroom module as reference multi-tenant CRUD pattern
-97a526c feat(database): enable RLS on remaining tenant-owned domain tables
-16e4095 feat(database): implement initial nursery domain model
-9894170 Setup NestJS API and database package
-0fa0bbc chore(database): add least-privilege nursery_app application role
-cb24315 feat(database): add row level security policies
-5425312 feat(database): add initial identity Prisma schema
-385b6dc chore: add local Postgres dev environment for Sprint 2
-```
+- **Domain model:** frozen, committed (`d05e078`, `ADR-0017`).
+- **Information Architecture:** frozen, committed (`fde6fb9`, `ia-freeze.md`).
+- **Wireframes:** approved and frozen, committed (`97e5ac4`, `wireframe-freeze.md`).
+- **Configuration Engine database foundation:** implemented and committed (`686e189`) — schema (14 new tables + 6 modified), 4 migrations (schema, constraints, RLS, backfill), seed script, schema-level integration tests, repository-layer changes to `invoice.repository.ts`/`test-db.ts`.
+- **Backend Services design:** **approved and frozen** this session — see [backend-services-freeze.md](./architecture/backend-services-freeze.md) and [configuration-engine-backend-services.md](./architecture/configuration-engine-backend-services.md). 19 services across three tiers, reviewed against SRP, service boundaries, circular dependencies, transaction boundaries, repository responsibilities, business-rule ownership, testability, maintainability, duplicated logic, and over-engineering. Five must-fix issues found and corrected (two circular dependencies, one unassigned business rule, one missing shared primitive, one signature contradiction) — all resolved and cross-checked.
+- **Next phase: Backend Services implementation.** First implementation target: `PlanService`. No further UX, IA, domain-model, wireframe, or Backend Services *design* work unless implementation exposes a concrete, specific problem — all of the above are frozen.
 
-Note: `apps/api/package.json`'s diff (in the `4254948` commit) bundles both Identity's runtime dependencies (jwt/passport/argon2/cookie-parser) and the test tooling (jest/supertest/ts-jest) — split by file wasn't practical, so the test commit (`56bb63e`) only adds new files, no `package.json` changes.
-
-## Working tree status
-
-Clean. `git status --porcelain` returns nothing. Postgres (`docker-compose`) is up and healthy. No stray `node` processes running. No leftover e2e test data in the database (tenants/users/classrooms matching the e2e test naming pattern all confirmed at 0 rows).
-
-## Completed backend features
-
-**Database:** full MVP domain model (10 tables: Classroom, Child, Enrollment, Guardian, ChildGuardian, Staff, Attendance, Invoice, InvoiceLineItem, Payment) plus Identity's 6 tables. RLS enabled and forced on every tenant-owned table, including a self-access policy on `tenant_memberships` for pre-tenant-context login lookups. `nursery_app` least-privilege role in place.
-
-**Identity module** (`apps/api/src/modules/identity/`): `POST /auth/login` (argon2 verify, membership resolution, RS256 JWT + opaque refresh token via httpOnly cookies), `POST /auth/refresh` (rotation + reuse detection + whole-chain revocation), `GET /auth/me`. `JwtAuthGuard`, `RolesGuard` → `AuthorizationService` (role-based, swappable for permissions later). `@CurrentUser`/`@CurrentTenant` decorators. `CurrentTenantProvider` swapped from the dev `FixedTenantProvider` stopgap to a real JWT-derived `JwtTenantProvider` (Classroom's own code didn't change, only the DI binding — the design worked as intended). New `CurrentUserProvider`/`JwtUserProvider` populate audit fields.
-
-**Classroom module:** retrofitted with real `JwtAuthGuard`/`RolesGuard` protection (`OWNER`/`ADMIN` required for writes) and real `createdBy`/`updatedBy` from `CurrentUserProvider` (previously `null` placeholders).
-
-**Test suite:** 45 unit tests (all passing) covering `AuthService`, `AuthorizationService`, `TokenService`, `RolesGuard`, `parseDurationMs`, `JwtTenantProvider`, `JwtUserProvider`. E2E suite written (`auth.e2e-spec.ts`, `authorization.e2e-spec.ts`, `rls-tenant-isolation.e2e-spec.ts`) covering login success/invalid/unknown-user, `/auth/me` with missing/malformed/wrong-key/expired tokens, refresh rotation + reuse detection + chain revocation, role-based authorization via Classroom, RLS tenant isolation via Classroom, and multiple active memberships.
-
-**Real bugs found and fixed via testing** (not hypothetical — both confirmed root-caused):
-1. Refresh reuse-detection was unreachable — a rotated-out token's `revokedAt` was caught by the generic "invalid" check before the `replacedByTokenId` reuse check ever ran. Fixed by reordering the checks in `AuthService.refresh`.
-2. RLS defect: `SET LOCAL`/`set_config(..., true)` rolls a custom GUC back to an **empty string** (not `NULL`) after commit, once that GUC has been touched at least once on a connection. Since `tenant_memberships` has two OR'd policies (`tenant_isolation` via `app.tenant_id`, `self_access` via `app.user_id`), a request setting only one left the other's stale placeholder at `''` on a reused pooled connection, and casting `''::uuid` threw instead of cleanly excluding the row. Fixed every RLS policy (all 12, across 11 tables) to use `NULLIF(current_setting(...), '')::uuid`, which treats "never set" and "reset to empty string" identically and fails closed without erroring.
-
-## Pending verification
-
-**The e2e suite has not been confirmed passing after the empty-string RLS fix.** The re-run was interrupted mid-command before this checkpoint was requested. Before this session, the interleaving bug (finding #2 above) was reproduced and fixed, and confirmed via a standalone script (login → classroom op → login → classroom op → login, alternating context types, 5x in a row, all succeeded). The full `jest --config ./test/jest-e2e.json --runInBand` run itself has **not** been re-executed since the fix — that's the immediate unfinished item.
-
-## Database migration status
+## 2. Git status — exact working tree state at time of writing
 
 ```
-6 migrations found in prisma/migrations
-Database schema is up to date!
+Changes not staged for commit:
+	modified:   docs/SESSION_CHECKPOINT.md                                     [this update]
+	modified:   docs/architecture/roadmap.md                                   [Backend Services Design — milestone marker]
+
+Untracked files:
+	docs/architecture/backend-services-freeze.md                               [Backend Services freeze]
+	docs/architecture/configuration-engine-backend-services.md                 [Backend Services design]
 ```
 
-All 6 migrations applied, in order:
-1. `20260719125200_init_identity_schema`
-2. `20260719131543_add_rls_policies`
-3. `20260719180905_add_domain_model`
-4. `20260719182944_add_domain_rls_policies`
-5. `20260719191622_add_membership_self_access_policy`
-6. `20260719202648_fix_rls_empty_string_vs_null`
+Everything else — Configuration Engine database foundation, Information Architecture freeze, wireframe freeze — is already committed (see §1 for hashes). One commit still pending: the Backend Services design + freeze docs, the `roadmap.md` milestone marker, and this checkpoint update.
 
-## Next recommended step
+## 3. Backend Services design — approved, reviewed, corrected, frozen
 
-Re-run the full e2e suite (`cd apps/api && npx jest --config ./test/jest-e2e.json --runInBand`) to confirm the empty-string RLS fix actually resolves all three previously-failing tests (`rls-tenant-isolation.e2e-spec.ts` and the affected cases in `authorization.e2e-spec.ts`), and that nothing else regressed. Once that's green, produce the final coverage report and summary — the two deliverables still open from the "Identity test suite" task before moving on to the Child module.
+Design doc: [configuration-engine-backend-services.md](./architecture/configuration-engine-backend-services.md). Freeze summary: [backend-services-freeze.md](./architecture/backend-services-freeze.md).
+
+19 services across three tiers — Tier A (7 configuration-definition services: `Plan`/`PlanPrice`/`Fee`/`PlanFee`/`Discount`/`SiblingDiscountTier`/`Holiday`), Tier B (4 per-child/per-enrollment assignment services: `EnrollmentBillingTerms`/`ChildFeeAssignment`/`ChildDiscountAssignment`/`Waiver`), Tier C (8 cross-cutting computation/orchestration services: `Capacity`/`PricingEngine`/`BillingRun`/`Payment`/`PaymentAllocation`/`ManualOverride`/`OneTimeCharge`/`CreditNote`) — plus extensions to the existing `EnrollmentService` and `InvoiceService`.
+
+A full architecture review ran before approval. Five must-fix issues were found and corrected in the design document itself (its §14 has the full reasoning): an automatic credit-sweep trigger that created a circular dependency between `PaymentAllocationService` and `InvoiceService` (removed); `CapacityService` routing through `EnrollmentRepository`, creating a second circular dependency (fixed — `CapacityService` now owns its own minimal read); sibling-count resolution with no named owner (fixed — assigned to `EnrollmentBillingTermsService.countEligibleSiblings`); no shared primitive for invoice regeneration, risking duplicated logic between `BillingRunService` and `WaiverService.applyRetroactively` (fixed — `InvoiceService.replaceGeneratedLines`/`addExceptionLineItem` and `BillingRunService.regenerateInvoiceForChild` now own it); and a `tx`-parameter signature contradiction on `PricingEngineService.computeChargesForPeriod` (fixed).
+
+**Frozen for implementation** as of 2026-07-29.
+
+## 4. Resume next session
+
+1. Begin Backend Services implementation with `PlanService` (Tier A, no dependencies on anything else in the design).
+2. Follow the build order in [backend-services-freeze.md](./architecture/backend-services-freeze.md) / [configuration-engine-backend-services.md](./architecture/configuration-engine-backend-services.md) §13: Tier A leaf-first (`PlanService` → `PlanPriceService` → `FeeService` → `PlanFeeService` → `DiscountService` → `SiblingDiscountTierService` → `HolidayService`), then `CapacityService`, then `EnrollmentBillingTermsService`, then remaining Tier B, then `PricingEngineService`, then `BillingRunService` and the rest of Tier C.
+3. Do not reopen the domain model, Information Architecture, wireframes, database schema, or the Backend Services design itself unless implementation surfaces a concrete, specific problem — all are frozen.

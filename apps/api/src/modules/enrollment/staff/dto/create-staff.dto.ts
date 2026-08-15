@@ -1,8 +1,18 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateString, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
-/** Every field is independently optional - a bare Staff row with only a userId link ("works here, details pending") is a legitimate state. */
+/** firstName/lastName are the only required fields - everything else is independently optional; a bare Staff row with just a name is a legitimate state. */
 export class CreateStaffDto {
+  @ApiProperty({ example: 'Ava' })
+  @IsString()
+  @IsNotEmpty()
+  firstName!: string;
+
+  @ApiProperty({ example: 'Smith' })
+  @IsString()
+  @IsNotEmpty()
+  lastName!: string;
+
   @ApiPropertyOptional({ example: 'Teacher' })
   @IsOptional()
   @IsString()
@@ -13,12 +23,18 @@ export class CreateStaffDto {
   @IsDateString()
   hireDate?: string;
 
-  @ApiPropertyOptional({ format: 'uuid', description: 'Primary/display classroom assignment only - not scheduling' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Primary/display classroom assignment only - not scheduling',
+  })
   @IsOptional()
   @IsUUID()
   classroomId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid', description: 'Links to an existing User with an active membership in this tenant' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Links to an existing User with an active membership in this tenant',
+  })
   @IsOptional()
   @IsUUID()
   userId?: string;

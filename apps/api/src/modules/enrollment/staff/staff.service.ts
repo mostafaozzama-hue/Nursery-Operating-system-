@@ -24,7 +24,9 @@ export class StaffService {
     const userId = this.currentUser.getUserId();
     return this.repository.create(tenantId, dto, userId).catch((error) => {
       if (isUniqueConstraintViolation(error)) {
-        throw new ConflictException('This user is already linked to another staff profile in this tenant');
+        throw new ConflictException(
+          'This user is already linked to another staff profile in this tenant',
+        );
       }
       return this.translateError(error);
     });
@@ -46,7 +48,9 @@ export class StaffService {
     const userId = this.currentUser.getUserId();
     return this.repository.update(tenantId, id, dto, userId).catch((error) => {
       if (isUniqueConstraintViolation(error)) {
-        throw new ConflictException('This user is already linked to another staff profile in this tenant');
+        throw new ConflictException(
+          'This user is already linked to another staff profile in this tenant',
+        );
       }
       return this.translateError(error);
     });

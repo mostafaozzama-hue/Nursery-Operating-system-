@@ -1,0 +1,309 @@
+'use client';
+
+import Link from 'next/link';
+import { Card, CardHeader, CardTitle } from '@/components/common/card';
+import { Button } from '@/components/ui/button';
+import { isApiError } from '@/lib/api/errors';
+import { useAuth } from '@/lib/auth';
+import { useBillingRunSummary } from '@/lib/billing-runs/queries';
+import { useDiscountSummary } from '@/lib/discounts/queries';
+import { useFeeSummary } from '@/lib/fees/queries';
+import { useHolidaySummary } from '@/lib/holidays/queries';
+import { usePlanSummary } from '@/lib/plans/queries';
+import { ConfigurationSectionHeader } from './configuration-section-header';
+
+/**
+ * Frozen spec (see docs/SESSION_CHECKPOINT.md for the full design history):
+ * every card answers one operational question and ends in a single "Next
+ * Step" derived honestly from real backend state - never an invented
+ * health metric. Plans, Fees, Discounts, and now Holidays are live now that
+ * their own frontend screens have shipped (Holidays is total-only - it has
+ * no isActive at all, so there's no active/inactive split to report, unlike
+ * the other three); Billing Runs still renders a plain "not available yet"
+ * state, not because its backend data is unavailable but because ITS OWN
+ * frontend screens aren't part of this sprint's scope yet, and a card
+ * linking to a route that doesn't exist would be worse than an honest stub.
+ * Sibling Discount Tiers deliberately gets no card at all - a low-frequency
+ * configuration page, reached only via a secondary link from the Discounts
+ * page, not one of the entities a nursery admin touches routinely. Waivers
+ * gets a plain text line, not a card - there's no tenant-wide endpoint to
+ * summarize it and no Next Step to derive (per-child waiver UI does exist,
+ * on Child Detail, but that's not a fact this tenant-wide dashboard can
+ * summarize into a single count). Billing Runs is now live (Sprint 6) -
+ * OWNER/ADMIN-only, so its card only renders for canManage, matching
+ * BillingRunController's own class-level role gate; STAFF simply doesn't see
+ * the card at all, rather than seeing a "you don't have access" stub among
+ * otherwise-real cards.
+ */
+export function ConfigurationDashboard() {
+  const { user } = useAuth();
+  const canManage = user?.role === 'OWNER' || user?.role === 'ADMIN';
+  const plans = usePlanSummary();
+  const fees = useFeeSummary();
+  const discounts = useDiscountSummary();
+  const holidays = useHolidaySummary();
+  const billingRuns = useBillingRunSummary(canManage);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <ConfigurationSectionHeader
+        title="Configuration"
+        action={
+          !plans.isLoading && plans.activeCount === 0
+            ? { label: 'Create your first plan', href: '/dashboard/configuration/plans/new' }
+            : { label: 'View plans', href: '/dashboard/configuration/plans' }
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <PlansCard
+          isLoading={plans.isLoading}
+          error={plans.error}
+          activeCount={plans.activeCount}
+          total={plans.total}
+        />
+        <FeesCard
+          isLoading={fees.isLoading}
+          error={fees.error}
+          activeCount={fees.activeCount}
+          total={fees.total}
+        />
+        <DiscountsCard
+          isLoading={discounts.isLoading}
+          error={discounts.error}
+          activeCount={discounts.activeCount}
+          total={discounts.total}
+        />
+        <HolidaysCard
+          isLoading={holidays.isLoading}
+          error={holidays.error}
+          total={holidays.total}
+        />
+        {canManage && (
+          <BillingRunsCard
+            isLoading={billingRuns.isLoading}
+            error={billingRuns.error}
+            total={billingRuns.total}
+          />
+        )}
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        Waivers aren&apos;t available in this release yet.
+      </p>
+    </div>
+  );
+}
+
+function PlansCard({
+  isLoading,
+  error,
+  activeCount,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  activeCount: number;
+  total: number;
+}) {
+  const nextStep =
+    activeCount === 0
+      ? { label: 'Create your first plan', href: '/dashboard/configuration/plans/new' }
+      : { label: 'Review plan prices', href: '/dashboard/configuration/plans' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Plans</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {activeCount === 0
+              ? 'No active plans — nothing can be billed yet.'
+              : `${activeCount} active plan${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FeesCard({
+  isLoading,
+  error,
+  activeCount,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  activeCount: number;
+  total: number;
+}) {
+  const nextStep =
+    activeCount === 0
+      ? { label: 'Add a fee', href: '/dashboard/configuration/fees/new' }
+      : { label: 'Review optional fees', href: '/dashboard/configuration/fees' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Fees</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {activeCount === 0
+              ? 'No fees configured yet.'
+              : `${activeCount} active fee${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DiscountsCard({
+  isLoading,
+  error,
+  activeCount,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  activeCount: number;
+  total: number;
+}) {
+  const nextStep =
+    activeCount === 0
+      ? { label: 'Add a discount', href: '/dashboard/configuration/discounts/new' }
+      : { label: 'Review discounts', href: '/dashboard/configuration/discounts' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Discounts</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {activeCount === 0
+              ? 'No discounts configured yet.'
+              : `${activeCount} active discount${activeCount === 1 ? '' : 's'}${total > activeCount ? ` (${total} total)` : ''}.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Total-only, unlike every other live card here - Holiday has no isActive at all, so there is no active/inactive split to report honestly. */
+function HolidaysCard({
+  isLoading,
+  error,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  total: number;
+}) {
+  const nextStep =
+    total === 0
+      ? { label: 'Add a holiday', href: '/dashboard/configuration/holidays/new' }
+      : { label: 'Review holidays', href: '/dashboard/configuration/holidays' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Holidays</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {total === 0
+              ? 'No holidays configured yet.'
+              : `${total} holiday${total === 1 ? '' : 's'} configured.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Total-only, matching HolidaysCard's shape - a BillingRun has no active/inactive split either (it either exists or doesn't). Only rendered for canManage by the caller. */
+function BillingRunsCard({
+  isLoading,
+  error,
+  total,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  total: number;
+}) {
+  const nextStep =
+    total === 0
+      ? { label: 'Trigger your first run', href: '/dashboard/configuration/billing-runs/new' }
+      : { label: 'Review billing runs', href: '/dashboard/configuration/billing-runs' };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Billing Runs</CardTitle>
+      </CardHeader>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <p className="text-sm text-destructive">
+          {isApiError(error) ? error.message : 'Something went wrong.'}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">
+            {total === 0
+              ? 'No billing runs triggered yet.'
+              : `${total} billing run${total === 1 ? '' : 's'} triggered.`}
+          </p>
+          <Button asChild variant="outline" size="sm" className="w-fit">
+            <Link href={nextStep.href}>{nextStep.label}</Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}

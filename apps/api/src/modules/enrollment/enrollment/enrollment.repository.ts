@@ -2,6 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@nursery-os/database';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { CapacityService } from '../capacity/capacity.service';
+// EnrollmentBillingTermsRepository, not the request-scoped Service - only
+// openWithEnrollment/closeWithEnrollment are used here (explicit tenantId,
+// no CurrentTenantProvider/CurrentUserProvider needed), and injecting the
+// request-scoped Service into this cross-module singleton repository broke
+// EnrollmentBillingTermsController's own request-scope resolution (root
+// cause confirmed experimentally - see docs/SESSION_CHECKPOINT.md).
+import { EnrollmentBillingTermsRepository } from '../enrollment-billing-terms/enrollment-billing-terms.repository';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
 import { EnrollmentConflictError } from './enrollment-conflict.error';
 import { EnrollmentSortField, EnrollmentStatus } from './dto/enrollment-query.dto';
@@ -17,10 +25,21 @@ interface FindManyOptions {
   sortOrder: 'asc' | 'desc';
 }
 
+interface CreateBillingTermsData {
+  planId?: string;
+  billingGuardianId: string;
+  customRateAmount?: number;
+  customRateReason?: string;
+  depositAmount?: number;
+  depositRefundPolicy?: string;
+  withdrawalNoticeGivenDate?: string;
+}
+
 interface CreateData {
   childId: string;
   classroomId?: string;
   createdReason?: string;
+  billingTerms?: CreateBillingTermsData;
 }
 
 interface TransferData {
@@ -38,7 +57,11 @@ interface UpdateData {
 
 @Injectable()
 export class EnrollmentRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capacity: CapacityService,
+    private readonly billingTerms: EnrollmentBillingTermsRepository,
+  ) {}
 
   create(tenantId: string, data: CreateData, createdBy: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
@@ -48,11 +71,11 @@ export class EnrollmentRepository {
 
       let status: EnrollmentStatus = 'WAITLISTED';
       if (data.classroomId) {
-        await this.assertClassroomAvailable(tx, tenantId, data.classroomId);
+        await this.capacity.assertCapacityAvailable(tx, tenantId, data.classroomId);
         status = 'ACTIVE';
       }
 
-      return tx.enrollment.create({
+      const enrollment = await tx.enrollment.create({
         data: {
           tenantId,
           childId: data.childId,
@@ -63,6 +86,15 @@ export class EnrollmentRepository {
           createdBy,
         },
       });
+
+      // Billing terms are optional at creation (see CreateEnrollmentDto) - the
+      // already-shipped POST /enrollments contract stays backward-compatible
+      // for callers that don't send them.
+      if (data.billingTerms) {
+        await this.billingTerms.openWithEnrollment(tx, tenantId, enrollment.id, data.billingTerms, createdBy);
+      }
+
+      return enrollment;
     });
   }
 
@@ -126,7 +158,7 @@ export class EnrollmentRepository {
         throw new EnrollmentConflictError('Already assigned to this classroom');
       }
 
-      await this.assertClassroomAvailable(tx, tenantId, data.newClassroomId);
+      await this.capacity.assertCapacityAvailable(tx, tenantId, data.newClassroomId);
 
       const now = new Date();
 
@@ -142,7 +174,7 @@ export class EnrollmentRepository {
         throw new EnrollmentConflictError('Enrollment already closed');
       }
 
-      return tx.enrollment.create({
+      const newEnrollment = await tx.enrollment.create({
         data: {
           tenantId,
           childId: current.childId,
@@ -153,6 +185,35 @@ export class EnrollmentRepository {
           createdBy: updatedBy,
         },
       });
+
+      // Lockstep with Enrollment (domain-model.md's Soft-delete cascade
+      // policy): closing this Enrollment row closes its paired billing
+      // terms too. A pure classroom transfer doesn't change billing terms,
+      // so - unlike changeTerms - they carry forward unchanged onto the new
+      // segment. No-op if this enrollment never had billing terms.
+      const closedTerms = await this.billingTerms.closeWithEnrollment(tx, tenantId, id, now, updatedBy);
+      if (closedTerms) {
+        await this.billingTerms.openWithEnrollment(
+          tx,
+          tenantId,
+          newEnrollment.id,
+          {
+            planId: closedTerms.planId ?? undefined,
+            billingGuardianId: closedTerms.billingGuardianId,
+            customRateAmount: closedTerms.customRateAmount ? Number(closedTerms.customRateAmount) : undefined,
+            customRateReason: closedTerms.customRateReason ?? undefined,
+            depositAmount: closedTerms.depositAmount ? Number(closedTerms.depositAmount) : undefined,
+            depositRefundPolicy: closedTerms.depositRefundPolicy ?? undefined,
+            withdrawalNoticeGivenDate: closedTerms.withdrawalNoticeGivenDate
+              ? closedTerms.withdrawalNoticeGivenDate.toISOString().slice(0, 10)
+              : undefined,
+          },
+          updatedBy,
+          false, // carrying forward unchanged values - not a new assignment, so a since-deactivated Plan or soft-deleted Guardian must not block this transfer
+        );
+      }
+
+      return newEnrollment;
     });
   }
 
@@ -162,10 +223,12 @@ export class EnrollmentRepository {
         tx.enrollment.findFirst({ where: { id, tenantId, deletedAt: null } }),
       );
 
+      const now = new Date();
+
       const { count } = await tx.enrollment.updateMany({
         where: { id, endDate: null },
         data: {
-          endDate: new Date(),
+          endDate: now,
           endedReason: data.reason ?? 'Withdrawn',
           status: 'WITHDRAWN',
           updatedBy,
@@ -176,31 +239,10 @@ export class EnrollmentRepository {
         throw new EnrollmentConflictError('Enrollment already closed');
       }
 
+      // Lockstep with Enrollment - a withdrawal closes billing terms too, with nothing reopening. No-op if none exist.
+      await this.billingTerms.closeWithEnrollment(tx, tenantId, id, now, updatedBy);
+
       return findOrThrow('Enrollment', id, () => tx.enrollment.findUnique({ where: { id } }));
     });
-  }
-
-  /**
-   * Count-then-compare has a small TOCTOU race under concurrent requests
-   * targeting the same classroom's last open seat - acceptable for the MVP
-   * (capacity overshoot by one is a minor, self-correcting operational
-   * issue, unlike double-enrolling a child).
-   */
-  private async assertClassroomAvailable(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    classroomId: string,
-  ): Promise<void> {
-    const classroom = await findOrThrow('Classroom', classroomId, () =>
-      tx.classroom.findFirst({ where: { id: classroomId, tenantId, deletedAt: null } }),
-    );
-
-    const activeCount = await tx.enrollment.count({
-      where: { tenantId, classroomId, status: 'ACTIVE', endDate: null, deletedAt: null },
-    });
-
-    if (activeCount >= classroom.capacity) {
-      throw new EnrollmentConflictError(`Classroom ${classroomId} has reached capacity`);
-    }
   }
 }

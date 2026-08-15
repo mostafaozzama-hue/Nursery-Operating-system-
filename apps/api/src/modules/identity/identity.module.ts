@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { EnvironmentVariables } from '../../config/environment-variables';
 import { AuthorizationService } from './authorization/authorization.service';
 import { CurrentUserProvider } from './current-user.provider';
@@ -20,6 +21,18 @@ import { TokenService } from './token.service';
   imports: [
     PassportModule,
     MembershipModule,
+    // Security review Pass 2 (S2): register/login/forgot-password had no
+    // brute-force/enumeration throttle at all. Named 'auth' so it's opted
+    // into per-route via @Throttle({ auth: {...} }), not applied globally -
+    // every other endpoint is unaffected. skipIf disables it only under
+    // Jest (JEST_WORKER_ID is set by Jest itself, never in a real
+    // deployment) - e2e specs call /auth/login far more than any real
+    // brute-force limit would allow (e.g. auth.e2e-spec.ts alone logs in
+    // 14 times), and throttling test infrastructure isn't this guard's job.
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'auth', ttl: 60_000, limit: 10 }],
+      skipIf: () => process.env.JEST_WORKER_ID !== undefined,
+    }),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService<EnvironmentVariables, true>) => ({

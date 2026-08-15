@@ -1,4 +1,4 @@
-import { PrismaClient } from '@nursery-os/database';
+import { Prisma, PrismaClient } from '@nursery-os/database';
 import * as argon2 from 'argon2';
 
 /**
@@ -9,6 +9,31 @@ import * as argon2 from 'argon2';
 export const superuserPrisma = new PrismaClient({
   datasourceUrl: 'postgresql://nursery:nursery@localhost:5432/nursery_os',
 });
+
+/**
+ * Connects as nursery_app - the same least-privilege, RLS-subject role the
+ * application itself uses. For schema-level tests that need to exercise RLS
+ * directly without bootstrapping the full NestJS app.
+ */
+export const appRolePrisma = new PrismaClient({
+  datasourceUrl: 'postgresql://nursery_app:nursery_app@localhost:5432/nursery_os',
+});
+
+/**
+ * Standalone equivalent of the API's withTenantContext (see
+ * apps/api/src/modules/tenancy/with-tenant-context.ts) - app.tenant_id is
+ * transaction-scoped (SET LOCAL semantics), so it must be set inside the
+ * same transaction as the query it protects.
+ */
+export async function withTenantScope<T>(
+  tenantId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return appRolePrisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+    return fn(tx);
+  });
+}
 
 export type SystemRoleKey = 'OWNER' | 'ADMIN' | 'STAFF';
 

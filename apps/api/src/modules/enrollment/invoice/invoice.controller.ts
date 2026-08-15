@@ -9,19 +9,22 @@ import { CreateLineItemDto } from './dto/create-line-item.dto';
 import { InvoiceQueryDto } from './dto/invoice-query.dto';
 import { InvoiceResponseDto } from './dto/invoice-response.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
+import { LineItemQueryDto } from './dto/line-item-query.dto';
 import { LineItemResponseDto } from './dto/line-item-response.dto';
 import { PaymentQueryDto } from './dto/payment-query.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
-import { RecordPaymentDto } from './dto/record-payment.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { UpdateLineItemDto } from './dto/update-line-item.dto';
 import { InvoiceService } from './invoice.service';
 
 /**
- * Line items and payments are nested here, not flat top-level resources
- * (unlike Enrollment/ChildGuardian) - neither has an independent lifecycle
- * apart from its parent invoice. No top-level DELETE on invoices - they're
- * financial history, voided rather than deleted, same reasoning as
+ * Line items are nested here, not a flat top-level resource (unlike
+ * Enrollment/ChildGuardian) - they have no independent lifecycle apart from
+ * their parent invoice. Payments are recorded guardian-anchored, not
+ * invoice-anchored - see PaymentController (/guardians/:guardianId/payments)
+ * - GET :invoiceId/payments here is a read-only view only, joining through
+ * PaymentAllocation. No top-level DELETE on invoices - they're financial
+ * history, voided rather than deleted, same reasoning as
  * Enrollment/Attendance. Removing a DRAFT line item is the one DELETE in
  * this module, since a draft item isn't a financial record yet.
  */
@@ -73,6 +76,14 @@ export class InvoiceController {
     return this.invoiceService.addLineItem(invoiceId, dto);
   }
 
+  @Get(':invoiceId/line-items')
+  @ApiOperation({ summary: 'List line items on an invoice (paginated, sortable)' })
+  @ApiParam({ name: 'invoiceId', format: 'uuid' })
+  @ApiPaginatedResponse(LineItemResponseDto)
+  findLineItems(@Param('invoiceId', ParseUUIDPipe) invoiceId: string, @Query() query: LineItemQueryDto) {
+    return this.invoiceService.findLineItems(invoiceId, query);
+  }
+
   @Patch(':invoiceId/line-items/:lineItemId')
   @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Edit a line item - draft only' })
@@ -110,17 +121,8 @@ export class InvoiceController {
     return this.invoiceService.issue(invoiceId, dto);
   }
 
-  @Post(':invoiceId/payments')
-  @Roles('OWNER', 'ADMIN', 'STAFF')
-  @ApiOperation({ summary: 'Record a payment against an issued invoice' })
-  @ApiParam({ name: 'invoiceId', format: 'uuid' })
-  @ApiResponse({ status: 201, type: PaymentResponseDto })
-  recordPayment(@Param('invoiceId', ParseUUIDPipe) invoiceId: string, @Body() dto: RecordPaymentDto) {
-    return this.invoiceService.recordPayment(invoiceId, dto);
-  }
-
   @Get(':invoiceId/payments')
-  @ApiOperation({ summary: 'List payments recorded against an invoice' })
+  @ApiOperation({ summary: 'List payments applied against an invoice (read-only - record via POST /guardians/:guardianId/payments)' })
   @ApiParam({ name: 'invoiceId', format: 'uuid' })
   @ApiPaginatedResponse(PaymentResponseDto)
   findPayments(@Param('invoiceId', ParseUUIDPipe) invoiceId: string, @Query() query: PaymentQueryDto) {

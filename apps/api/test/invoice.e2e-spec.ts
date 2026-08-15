@@ -49,6 +49,10 @@ describe('Invoice module (e2e)', () => {
   });
 
   afterAll(async () => {
+    // PaymentAllocation FKs to both Payment and Invoice - must go first, or
+    // either delete below fails with a foreign-key constraint violation now
+    // that payments are guardian-anchored and always create allocation rows.
+    await superuserPrisma.paymentAllocation.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
     await superuserPrisma.payment.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
     await superuserPrisma.invoiceLineItem.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
     await superuserPrisma.invoice.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
@@ -134,7 +138,7 @@ describe('Invoice module (e2e)', () => {
     expect(issueRes.status).toBe(201);
 
     const staffPaymentRes = await staffAgent
-      .post(`/invoices/${invoice.id}/payments`)
+      .post(`/guardians/${invoice.billedToGuardianId}/payments`)
       .send({ amount: 50, paymentMethod: 'CASH' });
     expect(staffPaymentRes.status).toBe(201);
 
@@ -206,7 +210,7 @@ describe('Invoice module (e2e)', () => {
     expect(noDueDateRes.status).toBe(409);
   });
 
-  it('settles a zero-amount invoice as PAID immediately on issue', async () => {
+  it('settles a zero-amount invoice as PAID immediately on issue, and a later payment to that guardian is banked as credit rather than reapplied to it', async () => {
     const agent = await loginAs(ownerAEmail);
     const invoice = await createDraftInvoice(agent, {
       lineItems: [{ description: 'Scholarship - full waiver', quantity: 1, unitAmount: 0 }],
@@ -217,10 +221,21 @@ describe('Invoice module (e2e)', () => {
     expect(issueRes.status).toBe(201);
     expect(issueRes.body.status).toBe('PAID');
 
+    // The guardian's only invoice is already PAID (not outstanding), so
+    // PaymentAllocationService finds no candidate to apply this to - the
+    // payment still succeeds, and the full amount becomes available credit
+    // rather than touching the already-settled invoice.
     const paymentRes = await agent
-      .post(`/invoices/${invoice.id}/payments`)
+      .post(`/guardians/${invoice.billedToGuardianId}/payments`)
       .send({ amount: 1, paymentMethod: 'CASH' });
-    expect(paymentRes.status).toBe(409);
+    expect(paymentRes.status).toBe(201);
+
+    const invoiceAfterRes = await agent.get(`/invoices/${invoice.id}`);
+    expect(invoiceAfterRes.body.status).toBe('PAID');
+    expect(invoiceAfterRes.body.totalAmount).toBe('0');
+
+    const creditRes = await agent.get(`/guardians/${invoice.billedToGuardianId}/credit`);
+    expect(creditRes.body.availableCredit).toBe('1');
   });
 
   it('runs the full lifecycle: draft -> issue -> partial payment -> full payment -> PAID', async () => {
@@ -234,7 +249,7 @@ describe('Invoice module (e2e)', () => {
     expect(issueRes.body.status).toBe('ISSUED');
 
     const firstPaymentRes = await agent
-      .post(`/invoices/${invoice.id}/payments`)
+      .post(`/guardians/${invoice.billedToGuardianId}/payments`)
       .send({ amount: 75, paymentMethod: 'CASH' });
     expect(firstPaymentRes.status).toBe(201);
 
@@ -242,8 +257,8 @@ describe('Invoice module (e2e)', () => {
     expect(afterFirstRes.body.status).toBe('PARTIALLY_PAID');
 
     const secondPaymentRes = await agent
-      .post(`/invoices/${invoice.id}/payments`)
-      .send({ amount: 125, paymentMethod: 'CARD' });
+      .post(`/guardians/${invoice.billedToGuardianId}/payments`)
+      .send({ amount: 125, paymentMethod: 'CREDIT_DEBIT_CARD' });
     expect(secondPaymentRes.status).toBe(201);
 
     const afterSecondRes = await agent.get(`/invoices/${invoice.id}`);
@@ -253,27 +268,46 @@ describe('Invoice module (e2e)', () => {
     expect(paymentsListRes.body.data).toHaveLength(2);
   });
 
-  it('rejects a payment that would exceed the outstanding balance', async () => {
+  it('applies a payment exceeding the outstanding balance to the invoice and banks the remainder as credit', async () => {
     const agent = await loginAs(ownerAEmail);
     const invoice = await createDraftInvoice(agent, {
       lineItems: [{ description: 'Tuition', quantity: 1, unitAmount: 100 }],
     });
     await agent.post(`/invoices/${invoice.id}/issue`).send({ dueDate: '2099-01-01' });
 
+    // PaymentAllocationService clamps what's applied to the invoice at its
+    // own outstanding balance ($100) - the $50 that doesn't fit is never an
+    // error, it becomes guardian-level credit instead.
     const overpayRes = await agent
-      .post(`/invoices/${invoice.id}/payments`)
+      .post(`/guardians/${invoice.billedToGuardianId}/payments`)
       .send({ amount: 150, paymentMethod: 'CASH' });
-    expect(overpayRes.status).toBe(409);
+    expect(overpayRes.status).toBe(201);
+
+    const invoiceAfterRes = await agent.get(`/invoices/${invoice.id}`);
+    expect(invoiceAfterRes.body.status).toBe('PAID');
+
+    const creditRes = await agent.get(`/guardians/${invoice.billedToGuardianId}/credit`);
+    expect(creditRes.body.availableCredit).toBe('50');
   });
 
-  it('rejects a payment against a DRAFT or VOID invoice', async () => {
+  it('never allocates a payment to a DRAFT or VOID invoice - the guardian banks it as credit instead', async () => {
     const agent = await loginAs(ownerAEmail);
 
+    // Only ISSUED/PARTIALLY_PAID invoices are ever payable candidates
+    // (PaymentAllocationRepository.findOutstandingForGuardian) - a DRAFT
+    // invoice is excluded from that query, not specially rejected.
     const draftInvoice = await createDraftInvoice(agent);
     const draftPaymentRes = await agent
-      .post(`/invoices/${draftInvoice.id}/payments`)
+      .post(`/guardians/${draftInvoice.billedToGuardianId}/payments`)
       .send({ amount: 10, paymentMethod: 'CASH' });
-    expect(draftPaymentRes.status).toBe(409);
+    expect(draftPaymentRes.status).toBe(201);
+
+    const draftInvoiceAfterRes = await agent.get(`/invoices/${draftInvoice.id}`);
+    expect(draftInvoiceAfterRes.body.status).toBe('DRAFT');
+    expect(draftInvoiceAfterRes.body.totalAmount).toBe('0');
+
+    const draftCreditRes = await agent.get(`/guardians/${draftInvoice.billedToGuardianId}/credit`);
+    expect(draftCreditRes.body.availableCredit).toBe('10');
 
     const voidInvoice = await createDraftInvoice(agent, {
       lineItems: [{ description: 'Tuition', quantity: 1, unitAmount: 100 }],
@@ -283,9 +317,15 @@ describe('Invoice module (e2e)', () => {
     expect(voidRes.status).toBe(201);
 
     const voidPaymentRes = await agent
-      .post(`/invoices/${voidInvoice.id}/payments`)
+      .post(`/guardians/${voidInvoice.billedToGuardianId}/payments`)
       .send({ amount: 10, paymentMethod: 'CASH' });
-    expect(voidPaymentRes.status).toBe(409);
+    expect(voidPaymentRes.status).toBe(201);
+
+    const voidInvoiceAfterRes = await agent.get(`/invoices/${voidInvoice.id}`);
+    expect(voidInvoiceAfterRes.body.status).toBe('VOID');
+
+    const voidCreditRes = await agent.get(`/guardians/${voidInvoice.billedToGuardianId}/credit`);
+    expect(voidCreditRes.body.availableCredit).toBe('10');
   });
 
   it('rejects voiding an already-void invoice', async () => {
@@ -383,29 +423,39 @@ describe('Invoice module (e2e)', () => {
     expect(confirmAsA.body.status).toBe('DRAFT');
   });
 
-  it('serializes two concurrent payments so an overpayment cannot slip through a race', async () => {
+  it('serializes two concurrent payments so an invoice is never over-allocated past its own total', async () => {
     const agent = await loginAs(ownerAEmail);
     const invoice = await createDraftInvoice(agent, {
       lineItems: [{ description: 'Tuition', quantity: 1, unitAmount: 100 }],
     });
     await agent.post(`/invoices/${invoice.id}/issue`).send({ dueDate: '2099-01-01' });
 
-    // Two $60 payments against a $100 invoice: together they'd overpay by
-    // $20. Without the invoice-row lock, both could read "paid so far = 0"
-    // concurrently and both succeed. With the lock, the second is forced to
-    // see the first's result and correctly gets rejected.
+    // Two $60 payments against a $100 invoice: together they'd over-allocate
+    // the invoice by $20 if both concurrently read "outstanding = $100"
+    // before either's allocation commits. Both payments themselves always
+    // succeed under the guardian-anchored model (only the allocation split
+    // is what the invoice-row lock protects) - without the lock, both could
+    // apply their full $60 to this one invoice; with it, the second is
+    // forced to see the first's already-applied $60 and can only apply the
+    // remaining $40, banking the other $20 as guardian credit instead of
+    // over-allocating past the invoice's own $100 total.
     const [first, second] = await Promise.all([
-      agent.post(`/invoices/${invoice.id}/payments`).send({ amount: 60, paymentMethod: 'CASH' }),
-      agent.post(`/invoices/${invoice.id}/payments`).send({ amount: 60, paymentMethod: 'CASH' }),
+      agent.post(`/guardians/${invoice.billedToGuardianId}/payments`).send({ amount: 60, paymentMethod: 'CASH' }),
+      agent.post(`/guardians/${invoice.billedToGuardianId}/payments`).send({ amount: 60, paymentMethod: 'CASH' }),
     ]);
-
-    const statuses = [first.status, second.status].sort();
-    expect(statuses).toEqual([201, 409]);
+    expect([first.status, second.status]).toEqual([201, 201]);
 
     const paymentsRes = await agent.get(`/invoices/${invoice.id}/payments?pageSize=100`);
-    expect(paymentsRes.body.data).toHaveLength(1);
+    const totalApplied = paymentsRes.body.data.reduce(
+      (sum: number, allocation: { amountApplied: string }) => sum + Number(allocation.amountApplied),
+      0,
+    );
+    expect(totalApplied).toBe(100); // never exceeds the invoice's own total, regardless of the race
 
     const finalInvoiceRes = await agent.get(`/invoices/${invoice.id}`);
-    expect(finalInvoiceRes.body.status).toBe('PARTIALLY_PAID');
+    expect(finalInvoiceRes.body.status).toBe('PAID');
+
+    const creditRes = await agent.get(`/guardians/${invoice.billedToGuardianId}/credit`);
+    expect(creditRes.body.availableCredit).toBe('20');
   });
 });

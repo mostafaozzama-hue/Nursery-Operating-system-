@@ -1,0 +1,121 @@
+# Nursery OS — Product Roadmap
+
+**Status:** Living document — Part of the Nursery OS Product Bible. Every feature listed in [feature-map.md](./feature-map.md) is mapped to exactly one phase below. Update this document whenever a feature ships (mark it done, don't delete it — this roadmap also serves as a build history) or when scope is re-sequenced.
+
+**Relationship to other documents:** [feature-map.md](./feature-map.md) defines *what* exists at each tier (MVP/Professional/Enterprise/Future) for pricing purposes; this document defines *when* it gets built, which is a related but distinct axis — some MVP-tier (pricing) features aren't built yet and are earliest in the build sequence regardless of tier, while some later-phase work (design-system foundation) isn't a customer-facing "feature" at all but must land before dependent features can.
+
+---
+
+## Phase 1 — MVP
+
+**Goal:** Every MVP-tier feature from [feature-map.md](./feature-map.md) actually works end-to-end, on a real visual design system, for a small nursery running its entire daily operation inside Nursery OS. This phase closes every gap between "backend exists" and "a user can actually do this."
+
+**Foundational (build once, unblock everything else):**
+- ~~**Information Architecture**~~ — ✅ **frozen** (2026-07-28): Admin Workspace + Classroom Workspace navigation, workspace routing, dashboard vision, and the cross-cutting UX rules (progressive disclosure, bulk operations, internal-terminology hiding) — see [ia-freeze.md](./ia-freeze.md) and [design-system.md §11](./design-system.md#11-navigation--information-architecture). Not revisited unless implementation exposes a concrete usability problem.
+- ~~**Low-Fidelity Wireframes**~~ — ✅ **approved and frozen** (2026-07-28): 10 MVP screens (Dashboard, Children List, Child Detail, Enrollment Flow, Attendance, Invoices, Payments, Tuition Plans, Settings, Classroom Roster), reviewed against operational owner feedback and a full cross-screen consistency pass — see [wireframe-freeze.md](./wireframe-freeze.md). UX phase complete. Next: implementation, starting with backend services.
+- ~~**Backend Services Design (Configuration Engine)**~~ — ✅ **approved and frozen** (2026-07-29): service-boundary architecture for the Configuration Engine's backend layer — 19 services across three tiers (configuration definitions, per-child assignment, cross-cutting computation/orchestration), plus the `EnrollmentService`/`InvoiceService` extensions they require — with dependency, transaction-boundary, validation, error-handling, and authorization conventions all specified. Reviewed for SRP, service boundaries, circular dependencies, transaction boundaries, repository responsibilities, business-rule ownership, testability, maintainability, duplicated logic, and over-engineering; five must-fix issues found and corrected. See [backend-services-freeze.md](./backend-services-freeze.md) and [configuration-engine-backend-services.md](./configuration-engine-backend-services.md).
+- ~~**Configuration Engine Backend Implementation**~~ — ✅ **complete**: every Tier A/B/C service from the frozen design with a named caller is implemented, reviewed, and committed — `Plan`/`PlanPrice`/`Fee`/`PlanFee`/`Discount`/`SiblingDiscountTier`/`Holiday` (definitions), `EnrollmentBillingTerms`/`ChildFeeAssignment`/`ChildDiscountAssignment`/`Waiver` (per-child assignment), `CapacityService`/`PricingEngineService`/`BillingRunService`/`OneTimeChargeService`/`ManualOverrideService`/`CreditNoteService`/`PaymentService`/`PaymentAllocationService` (cross-cutting orchestration), plus the guardian-anchored `Payment`/`PaymentAllocation` model replacing the original invoice-anchored one. See `docs/SESSION_CHECKPOINT.md` for the full implementation history. **Next: the frontend for all of this — see "Configuration Engine Frontend" below, currently the largest gap between built and usable in the product.**
+- Design-system token and shared-component implementation ([design-system.md §4](./design-system.md#4-design-tokens)/[§5](./design-system.md#5-core-components)) — palette, typography, Card/Badge/EmptyState/Skeleton/Toast primitives, consolidated `EntityPicker`, sortable `DataTable`. **Partially shipped** alongside Attendance rather than as its own separate pass (see [design-system.md §16](./design-system.md#16-prioritized-ux-improvement-backlog) item 1): `Card`/`Badge`/`EmptyState`/`Skeleton`/sortable `DataTable`/a new `Select` primitive exist and are used by Attendance, but not yet retrofitted onto the modules below. Still outstanding: the full palette/typography rollout, `Toast`, entity-header component, `EntityPicker` consolidation.
+- Entity Detail / List / Form page-pattern rollout ([design-system.md §10](./design-system.md#10-reusable-page-patterns)) across all already-built modules.
+- Fix the two tracked correctness defects (raw `userId` leak on Guardian Detail, raw UUIDs in breadcrumbs — see [ux-debt.md](./ux-debt.md)).
+
+**Feature work (already-backend, needs frontend):**
+- ~~**Attendance** frontend~~ — ✅ **shipped**: check-in/check-out/mark-absent via a tablet-first classroom daily roster, classroom-scoped daily view, OWNER/ADMIN correction workflow (audit history + detail + correction form).
+- ~~**Billing** frontend~~ — ✅ **shipped**: invoice creation/viewing, line items, Issue/Void actions, Detail page (single tenant-default currency, EGP — see [enterprise-roadmap.md §4](./enterprise-roadmap.md#4-regional-localization)).
+- ~~**Payments** frontend (original invoice-anchored model)~~ — ✅ **shipped, since superseded**: manual payment recording against invoices via a `Sheet side="right"` drawer, cash/Vodafone Cash/InstaPay/bank-transfer/card/check as first-class methods (integrations themselves — automated reconciliation — remain Phase 3, per [ADR-0009](./adrs/0009-regional-payment-methods-first-class.md)).
+- ~~**Payment Frontend Phase 1** (required migration)~~ — ✅ **shipped**: the backend replaced invoice-anchored `Payment` with a guardian-anchored, `PaymentAllocation`-based model (oldest-invoice-first allocation across a guardian's children); the frontend migrated to match — `packages/contracts`, API client/hooks, and the `Record Payment` drawer/invoice payment history all updated to the new model. See `docs/SESSION_CHECKPOINT.md`.
+- **Payment Frontend Phase 2** (additive, not yet started) ⬜ — guardian payment history and computed available-credit display on Guardian Detail, plus a guardian-scoped entry point for recording a payment there directly. Small, already scoped, no new navigation/routing/standalone page required — see `docs/SESSION_CHECKPOINT.md` for the detailed scope.
+
+**Feature work (net new):**
+- **Dashboard v1** — occupancy, headcount, attention list, birthdays, recent activity, all client-side-aggregated from existing endpoints ([design-system.md §12](./design-system.md#12-dashboard-vision)).
+- **Settings** — tenant profile/timezone, membership/role management UI (backend exists via the Memberships module, no dedicated settings-page frontend yet).
+- Basic Admissions inquiry log (manual pipeline stages).
+- **Billing Configuration engine (basic)** — Classes → Plans → Fees, `Plan` as a first-class entity (price, billing cycle, permitted attendance schedule, discount eligibility, active/inactive status), so an invoice is generated from a configured plan rather than hand-entered line items for the recurring case. Moved up from Phase 3/Professional: configuration before operations (manual overrides as the exception, not the default) is now core product identity, and applies at every tier including Starter — see [feature-map.md#billing](./feature-map.md#billing) and the Sequencing rationale below. This is the first, most-developed instance of a broader principle — Attendance-rules and Settings (working hours, holiday calendar, accepted payment methods) carry the same configuration philosophy per [feature-map.md](./feature-map.md)'s cross-cutting principle note, but remain named only, not yet scoped into a phase. **Backend: ✅ complete** (see above). **Frontend: ⬜ not started** — see "Configuration Engine Frontend" below.
+- **Configuration Engine Frontend** ⬜ **(not started, currently the top priority once design-system foundation lands)** — the admin-facing UI for the now-complete backend above. Sequenced in dependency order: (1) Tier A definitions UI — Plans, Fees, Discounts, Sibling Discount Tiers, Holidays; (2) per-child assignment UI — fee/discount assignment, `EnrollmentBillingTerms`, Waivers, surfaced on Child/Enrollment Detail; (3) `BillingRun` trigger + generated-invoice review screen, replacing today's fully-manual invoice line-item entry for the recurring case; (4) `OneTimeCharge`/`ManualOverride` audit-trail/`CreditNote` surfaces. **Prerequisite:** two `PricingEngineService` business-rule gaps need a product decision first (no rule for a child with no effective billing terms; no sibling-tier selection rule when a threshold is met by 2+ children) — see `docs/SESSION_CHECKPOINT.md` §3. Building this frontend against an engine that can't yet price a multi-child family would mean re-touching the same screens once the rule lands.
+
+**Already done, carried forward as-is:** Auth, Children, Guardians, Child-Guardian relationships, Classrooms, Enrollment, Staff, Payroll, **Attendance**, **Billing**, **Payments** — all built and stable per [feature-map.md](./feature-map.md). Billing and Payments specifically have further work planned beyond the design-system visual pass above — see the Configuration Engine and Payment Frontend Phase 2 items directly above.
+
+---
+
+## Phase 2 — Growth
+
+**Goal:** Give a growing small nursery, and an early medium nursery, the tools to stop losing prospective families and to communicate with current families without leaving WhatsApp — this phase is deliberately scoped narrower than the full Professional tier, as a bridge.
+
+- **CRM** (basic tier) — prospect/lead list separate from active Guardians, referral source tracking, lost-inquiry reasons.
+- **Admissions** (Professional tier) — tour scheduling with calendar sync, automated inquiry follow-up, waitlist-to-admission conversion tracking.
+- **Communication** — WhatsApp-integrated broadcast messaging (classroom-wide/nursery-wide announcements). This is sequenced early relative to its Professional-tier pricing placement because it is a named, market-specific differentiator (see [vision.md](./vision.md)) and unblocks real parent-facing value before the full Parent App exists.
+- **Payments** integrations — Vodafone Cash and InstaPay as connected payment methods (as opposed to Phase 1's manual recording of the same methods).
+- **Activities** and **Meals** basic daily logging — the first genuinely teacher-facing data-entry surfaces, informing the Teacher App work in Phase 3.
+- **Parent App** (MVP slice) — guardian portal login activated with a real UI, view own child's profile/enrollment/attendance. A deliberately thin first slice, not the full Professional-tier Parent App experience.
+
+---
+
+## Phase 3 — Professional
+
+**Goal:** Complete the Professional plan (see [pricing-strategy.md](./pricing-strategy.md)) — a medium nursery can fully delegate day-to-day operations, bill automatically, and give staff and parents dedicated, task-optimized experiences.
+
+- **Billing Configuration engine (advanced)** — discount/sibling-rate rules, waivers, recurring billing automation (monthly tuition auto-generation), late-fee automation. Builds on top of Phase 1's basic Classes → Plans → Fees configuration; Professional doesn't introduce configuration for the first time, it deepens it. **Backend: ✅ discount/sibling-rate rules, waivers, and recurring generation (`BillingRun`) are complete**, built alongside Phase 1's basic engine rather than as separate later work — only the admin UI for configuring them is outstanding (see Phase 1's "Configuration Engine Frontend"). **Late-fee automation specifically remains genuinely unbuilt** ⬜ — no such logic exists anywhere in the backend yet.
+- **Reports** — per-module exportable reports (attendance, enrollment, payroll summary).
+- **Teacher App** — dedicated tablet-optimized surface: classroom roster default landing, quick activity/meal/nap logging, one-handed interaction design ([design-system.md §6.2](./design-system.md#62-tablet-optimization-the-priority-device--teachers-front-desk)).
+- **Parent App** (full Professional slice) — invoice viewing/payment, activity-update feed, WhatsApp-first notification delivery.
+- **Guardians** — self-service portal fully wired (document sharing).
+- **Automation** (Professional tier) — automated late-fee application, automated attendance-absence-to-guardian-notification.
+- **Settings** (Professional tier) — branding (logo, primary color) on parent-facing surfaces, notification preferences.
+- **Staff** — document storage (contracts, certifications).
+- **Children** — real photo upload flow (replacing the current URL-only field), document attachments.
+
+---
+
+## Phase 4 — Enterprise
+
+**Goal:** Support multi-branch chains and larger organizations — see [enterprise-roadmap.md](./enterprise-roadmap.md) for the full architectural treatment this phase depends on (tenant hierarchy, permissions model, performance/scale work). This phase is gated on that architectural foundation landing first, not just on feature work.
+
+- **Multi-Branch** core capability (architecture in [enterprise-roadmap.md](./enterprise-roadmap.md)) — cross-branch reporting, per-branch settings overrides.
+- **Settings** — custom role/permission definitions beyond OWNER/ADMIN/STAFF.
+- **Medical** — full `MedicalRecord`, `MedicationAdministration`, `Incident` reporting, gated on the fine-grained permission model ([enterprise-roadmap.md](./enterprise-roadmap.md)).
+- **Learning** — curriculum/lesson-plan library, developmental milestone tracking, teacher lesson-plan authoring.
+- **Transportation** — route/vehicle management, child-to-route assignment, pickup/drop-off parent notification.
+- **Payroll** — history/versioning (revisiting Phase 1's deliberately simple mutable-record design), export integrations.
+- **Communication** — full two-way threaded messaging (`Conversation`/`Message`, explicitly not a naive 1:1 chat — see [feature-map.md](./feature-map.md#communication)).
+- **Analytics** — trend charts, occupancy/capacity forecasting, multi-branch comparative analytics, server-side aggregation replacing Phase 1's client-side dashboard aggregation.
+- **Accounting** — chart of accounts, multi-branch consolidated financials, external accounting-system export.
+- **Reports** — cross-module scheduled reports, custom report builder.
+- **CRM/Admissions** (Enterprise tier) — multi-branch pipeline, cross-branch lead routing/waitlist visibility.
+- **Compliance/auditing** work described in [enterprise-roadmap.md](./enterprise-roadmap.md) (audit log, regional regulatory exports).
+- **Multi-language** — the RTL/i18n foundation described in [design-system.md §8](./design-system.md#8-rtl--internationalization) is implemented as real, shipped Arabic localization in this phase (the *convention* of writing RTL-safe code starts much earlier, per that section — this phase is where translated strings and locale switching actually ship).
+
+---
+
+## Phase 5 — AI Platform
+
+**Goal:** Layer assistive and generative capability over a mature, clean, cross-module data set — deliberately last, since AI features are only as good as the data underneath them, and every domain above needs to exist and be trustworthy first.
+
+- **AI** domain in full: AI Assistant (natural-language operations queries), AI Reports (narrative analytics over Phase 4's trend data), AI Lesson Planning (built on Phase 4's Learning module), AI Parent Communication (drafting parent updates from Phase 3's teacher activity logs).
+- **Automation** (Enterprise/Future tier) — configurable cross-module if-this-then-that rules, Admissions-to-CRM-to-Marketing lifecycle automation.
+- **Marketing** — full Marketing CRM automation (nurture sequences, lifecycle campaigns).
+- **Website** — Website Builder for individual nursery branding, tied to Admissions inquiry capture.
+- **API / Marketplace / Integrations** — public API, third-party plugin ecosystem, pre-built connectors to external accounting/payment/government-reporting systems.
+- **Settings** — API key management supporting the above.
+
+---
+
+## Phase-to-tier cross-reference
+
+For quick sanity-checking against [pricing-strategy.md](./pricing-strategy.md) and [feature-map.md](./feature-map.md) — this is *not* a 1:1 mapping, and that's intentional (build sequencing and pricing tiers answer different questions):
+
+| Phase | Roughly corresponds to |
+|---|---|
+| Phase 1 — MVP | Starter plan, made fully real (closing today's backend-ahead-of-frontend gaps) |
+| Phase 2 — Growth | A deliberate bridge, pulling a few high-value Professional-tier items early (WhatsApp, Admissions) because they're named market differentiators, not because the whole Professional tier is done |
+| Phase 3 — Professional | Professional plan, completed in full |
+| Phase 4 — Enterprise | Enterprise plan, completed in full, gated on the architectural work in [enterprise-roadmap.md](./enterprise-roadmap.md) |
+| Phase 5 — AI Platform | Future tier in [feature-map.md](./feature-map.md) — not yet priced into any plan (see [pricing-strategy.md](./pricing-strategy.md)'s open pricing questions) |
+
+## Sequencing rationale (why this order, not another)
+
+1. **Design system before Dashboard, Dashboard before anything else customer-visible** — per [design-system.md §16](./design-system.md#16-prioritized-ux-improvement-backlog), building the visual foundation first means nothing gets reskinned twice, and the Dashboard directly closes the single most-named product gap ([vision.md](./vision.md)'s "control center").
+2. **Attendance and Billing/Payments frontends are pulled to the very front of Phase 1** despite being "just" MVP-tier features, because their backends are already complete and idle — this is the cheapest, lowest-risk value available in the entire roadmap, and [user-journeys.md](./user-journeys.md) identifies Attendance specifically as blocking four of six personas' core workflows today.
+3. **The Billing Configuration engine's basic tier (Classes → Plans → Fees) is pulled forward into Phase 1, out of Phase 3**, for a different reason than item 2 above: not because backend capacity is idle (it isn't built yet), but because configuration before operations — manual overrides as the exception rather than the default — is now identified as core product identity, not a Professional-tier convenience. An identity claim that only becomes true at the second-cheapest plan isn't the identity yet; it has to be true at Starter for it to be true at all. The advanced rules layer (discounts, waivers, full automation) stays in Phase 3, since depth-of-automation — not the underlying philosophy — is what Professional is meant to sell. This is a *cross-domain* principle, not a Billing-only one (see [feature-map.md](./feature-map.md)'s cross-cutting principle note) — Billing is simply the first instance far enough along to actually resequence; Attendance-rules and Settings configuration follow the same logic but aren't yet mature enough as scoped ideas to move into a phase.
+4. **WhatsApp/Admissions are pulled into Phase 2 ahead of the rest of Professional** because they are named, market-specific differentiators (see [vision.md](./vision.md)) — delaying them to "wait for the full Professional tier" would delay the product's actual competitive wedge.
+5. **Multi-branch/Enterprise architecture is sequenced as its own phase, not folded into Professional**, because it is genuinely architectural (tenant hierarchy, permissions, scale) rather than additive feature work — see [enterprise-roadmap.md](./enterprise-roadmap.md) for why this can't be done incrementally alongside Phase 3.
+6. **AI is last, deliberately** — every AI feature scoped in Phase 5 depends on clean, mature data from an earlier phase (AI Reports needs Phase 4's analytics; AI Lesson Planning needs Phase 4's Learning module) — building AI earlier would mean building it against data models that don't exist yet.

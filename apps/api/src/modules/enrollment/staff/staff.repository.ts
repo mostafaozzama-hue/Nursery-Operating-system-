@@ -11,6 +11,7 @@ import { StaffSortField } from './dto/staff-query.dto';
 interface FindManyOptions {
   page: number;
   pageSize: number;
+  name?: string;
   classroomId?: string;
   position?: string;
   sortBy: StaffSortField;
@@ -18,6 +19,8 @@ interface FindManyOptions {
 }
 
 interface CreateData {
+  firstName: string;
+  lastName: string;
   position?: string;
   hireDate?: string;
   classroomId?: string;
@@ -25,6 +28,8 @@ interface CreateData {
 }
 
 interface UpdateData {
+  firstName?: string;
+  lastName?: string;
   position?: string;
   hireDate?: string;
   classroomId?: string;
@@ -51,6 +56,8 @@ export class StaffRepository {
       return tx.staff.create({
         data: {
           tenantId,
+          firstName: data.firstName,
+          lastName: data.lastName,
           position: data.position,
           hireDate: data.hireDate ? new Date(data.hireDate) : undefined,
           classroomId: data.classroomId,
@@ -66,6 +73,14 @@ export class StaffRepository {
       const where: Prisma.StaffWhereInput = {
         tenantId,
         deletedAt: null,
+        ...(options.name
+          ? {
+              OR: [
+                { firstName: containsInsensitive(options.name) },
+                { lastName: containsInsensitive(options.name) },
+              ],
+            }
+          : {}),
         ...(options.classroomId ? { classroomId: options.classroomId } : {}),
         ...(options.position ? { position: containsInsensitive(options.position) } : {}),
       };
@@ -86,7 +101,9 @@ export class StaffRepository {
 
   findOneOrThrow(tenantId: string, id: string) {
     return withTenantContext(this.prisma, tenantId, (tx) =>
-      findOrThrow('Staff', id, () => tx.staff.findFirst({ where: { id, tenantId, deletedAt: null } })),
+      findOrThrow('Staff', id, () =>
+        tx.staff.findFirst({ where: { id, tenantId, deletedAt: null } }),
+      ),
     );
   }
 
@@ -145,10 +162,17 @@ export class StaffRepository {
     excludeId?: string,
   ): Promise<void> {
     const existingLink = await tx.staff.findFirst({
-      where: { tenantId, userId, deletedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      where: {
+        tenantId,
+        userId,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
     });
     if (existingLink) {
-      throw new StaffConflictError('This user is already linked to another staff profile in this tenant');
+      throw new StaffConflictError(
+        'This user is already linked to another staff profile in this tenant',
+      );
     }
   }
 }

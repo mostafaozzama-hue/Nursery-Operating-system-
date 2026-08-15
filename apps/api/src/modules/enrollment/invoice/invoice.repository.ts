@@ -4,15 +4,20 @@ import { getTenantLocalDate } from '../../../common/date/tenant-local-date';
 import { findOrThrow } from '../../../common/repository/find-or-throw';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { withTenantContext } from '../../tenancy/with-tenant-context';
+import { LineItemDraft } from '../pricing-engine/line-item-draft.type';
 import { InvoiceConflictError } from './invoice-conflict.error';
-import { InvoiceSortField, InvoiceStatus } from './dto/invoice-query.dto';
+import { InvoiceSortField, InvoiceStatus, PAYABLE_STATUSES } from './dto/invoice-query.dto';
+import { LineItemSortField } from './dto/line-item-query.dto';
 import { PaymentSortField } from './dto/payment-query.dto';
+
+const GENERATED_SOURCE_TYPES = ['PLAN_TUITION', 'FEE', 'DISCOUNT', 'WAIVER'] as const;
 
 interface FindManyOptions {
   page: number;
   pageSize: number;
   childId?: string;
   guardianId?: string;
+  billingRunId?: string;
   status?: InvoiceStatus;
   sortBy: InvoiceSortField;
   sortOrder: 'asc' | 'desc';
@@ -22,6 +27,13 @@ interface FindPaymentsOptions {
   page: number;
   pageSize: number;
   sortBy: PaymentSortField;
+  sortOrder: 'asc' | 'desc';
+}
+
+interface FindLineItemsOptions {
+  page: number;
+  pageSize: number;
+  sortBy: LineItemSortField;
   sortOrder: 'asc' | 'desc';
 }
 
@@ -54,14 +66,6 @@ interface IssueData {
   dueDate?: string;
 }
 
-interface RecordPaymentData {
-  amount: number;
-  paymentMethod: string;
-  paidAt?: string;
-}
-
-const PAYABLE_STATUSES = ['ISSUED', 'PARTIALLY_PAID'];
-
 @Injectable()
 export class InvoiceRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -88,6 +92,7 @@ export class InvoiceRepository {
         };
       });
       const totalAmount = lineItems.reduce((sum, li) => sum.plus(li.totalAmount), new Prisma.Decimal(0));
+      const invoiceNumber = await this.nextInvoiceNumber(tx, tenantId);
 
       return tx.invoice.create({
         data: {
@@ -96,12 +101,75 @@ export class InvoiceRepository {
           billedToGuardianId: data.billedToGuardianId,
           status: 'DRAFT',
           totalAmount,
+          invoiceNumber,
           dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
           createdBy,
           lineItems: { create: lineItems },
         },
       });
     });
+  }
+
+  /**
+   * Placeholder sequential numbering (INV-<year>-<count+1>) so invoice
+   * creation keeps working now that invoiceNumber is required - not the
+   * real Configuration Engine billing-number service, which is separate,
+   * later work per docs/architecture/domain-model.md. Locking the tenant
+   * row serializes concurrent invoice creation for that tenant within this
+   * transaction, same FOR UPDATE pattern as lockInvoice below, so two
+   * simultaneous requests can't compute the same number.
+   */
+  private async nextInvoiceNumber(tx: Prisma.TransactionClient, tenantId: string): Promise<string> {
+    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+    const count = await tx.invoice.count({ where: { tenantId } });
+    const year = new Date().getFullYear();
+    return `INV-${year}-${String(count + 1).padStart(6, '0')}`;
+  }
+
+  /**
+   * Composable - always runs inside the caller's transaction
+   * (BillingRunService.regenerateInvoiceForChild), never opens its own.
+   * Creates an empty (no line items yet) DRAFT invoice tagged with
+   * billingRunId - the caller inserts its lines separately via
+   * replaceGeneratedLines, the one place lines get written from drafts.
+   * No childId/billedToGuardianId existence check here, unlike the
+   * entry-point create() - both values come from EnrollmentBillingTerms
+   * (via PricingEngineService/EnrollmentBillingTermsService), already
+   * FK-validated internal data, not raw caller input.
+   */
+  async createComposable(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    data: { childId: string; billedToGuardianId: string; billingRunId: string },
+    actorId: string,
+  ) {
+    const invoiceNumber = await this.nextInvoiceNumber(tx, tenantId);
+    return tx.invoice.create({
+      data: {
+        tenantId,
+        childId: data.childId,
+        billedToGuardianId: data.billedToGuardianId,
+        billingRunId: data.billingRunId,
+        status: 'DRAFT',
+        totalAmount: new Prisma.Decimal(0),
+        invoiceNumber,
+        createdBy: actorId,
+      },
+    });
+  }
+
+  /** Composable (optional tx) - regenerateInvoiceForChild's idempotency lookup: does an invoice already exist for this child under this billing run. */
+  findByBillingRunAndChild(tenantId: string, billingRunId: string, childId: string, tx?: Prisma.TransactionClient) {
+    const run = (client: Prisma.TransactionClient) =>
+      client.invoice.findFirst({ where: { tenantId, billingRunId, childId, deletedAt: null } });
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
+  }
+
+  /** Composable (optional tx) - BillingRunService.generateForPeriod's "already fully ISSUED" check needs every invoice under a run, not just one child's. */
+  findAllForBillingRun(tenantId: string, billingRunId: string, tx?: Prisma.TransactionClient) {
+    const run = (client: Prisma.TransactionClient) =>
+      client.invoice.findMany({ where: { tenantId, billingRunId, deletedAt: null } });
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
   }
 
   findMany(tenantId: string, options: FindManyOptions) {
@@ -116,6 +184,7 @@ export class InvoiceRepository {
         deletedAt: null,
         ...(options.childId ? { childId: options.childId } : {}),
         ...(options.guardianId ? { billedToGuardianId: options.guardianId } : {}),
+        ...(options.billingRunId ? { billingRunId: options.billingRunId } : {}),
       };
 
       const where: Prisma.InvoiceWhereInput =
@@ -149,6 +218,21 @@ export class InvoiceRepository {
       );
       return this.withEffectiveStatus(invoice, tenant.timezone);
     });
+  }
+
+  /**
+   * Composable (optional tx) - WaiverService.applyRetroactively's entry
+   * read: resolves the invoice's current status (to branch DRAFT vs
+   * issued) and, via the joined billingRun, the period
+   * regenerateInvoiceForChild/computeChargesForPeriod need - one query,
+   * not two, since applyRetroactively needs both from its very first step.
+   */
+  findOneComposable(tenantId: string, id: string, tx?: Prisma.TransactionClient) {
+    const run = (client: Prisma.TransactionClient) =>
+      findOrThrow('Invoice', id, () =>
+        client.invoice.findFirst({ where: { id, tenantId, deletedAt: null }, include: { billingRun: true } }),
+      );
+    return tx ? run(tx) : withTenantContext(this.prisma, tenantId, run);
   }
 
   update(tenantId: string, id: string, data: UpdateInvoiceData, updatedBy: string) {
@@ -265,6 +349,98 @@ export class InvoiceRepository {
     });
   }
 
+  /**
+   * Composable - never opens its own transaction, always runs inside the
+   * caller's (BillingRunService.regenerateInvoiceForChild). Bulk-replaces
+   * only sourceType IN (PLAN_TUITION, FEE, DISCOUNT, WAIVER) lines with
+   * drafts; ONE_TIME_CHARGE and legacy NULL-sourceType lines are never
+   * touched - the one place idempotent regeneration is implemented.
+   */
+  async replaceGeneratedLines(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    invoiceId: string,
+    drafts: LineItemDraft[],
+    actorId: string,
+  ) {
+    const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
+    if (invoice.status !== 'DRAFT') {
+      throw new InvoiceConflictError('Only a draft invoice can have its generated lines replaced');
+    }
+
+    await tx.invoiceLineItem.updateMany({
+      where: {
+        tenantId,
+        invoiceId,
+        deletedAt: null,
+        sourceType: { in: [...GENERATED_SOURCE_TYPES] },
+      },
+      data: { deletedAt: new Date(), deletedBy: actorId },
+    });
+
+    if (drafts.length > 0) {
+      await tx.invoiceLineItem.createMany({
+        data: drafts.map((draft) => ({
+          tenantId,
+          invoiceId,
+          description: draft.description,
+          quantity: new Prisma.Decimal(draft.quantity),
+          unitAmount: new Prisma.Decimal(draft.unitAmount),
+          totalAmount: new Prisma.Decimal(draft.totalAmount),
+          sourceType: draft.sourceType,
+          planPriceId: draft.planPriceId,
+          createdBy: actorId,
+        })),
+      });
+    }
+
+    await this.recomputeTotal(tx, tenantId, invoiceId, actorId);
+    return findOrThrow('Invoice', invoiceId, () => tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }));
+  }
+
+  /**
+   * Composable - never opens its own transaction, always runs inside the
+   * caller's (OneTimeChargeService.add). Inserts one InvoiceLineItem
+   * regardless of invoice status - the DRAFT-only rule on addLineItem
+   * above is deliberately left unchanged, this is a separate, narrower
+   * path. sourceType is fixed to ONE_TIME_CHARGE, not caller-supplied.
+   * Returns the current (locked) invoice alongside the new line item, not
+   * just the line item, so the caller can decide whether a ManualOverride
+   * is needed without a second read - the invoice is already locked and
+   * in hand here, no reason to make the caller re-fetch it.
+   */
+  async addExceptionLineItem(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    invoiceId: string,
+    data: CreateLineItemData & { chargeCategory: string },
+    actorId: string,
+  ) {
+    await this.lockInvoice(tx, tenantId, invoiceId);
+
+    const quantity = new Prisma.Decimal(data.quantity);
+    const unitAmount = new Prisma.Decimal(data.unitAmount);
+    const lineItem = await tx.invoiceLineItem.create({
+      data: {
+        tenantId,
+        invoiceId,
+        description: data.description,
+        quantity,
+        unitAmount,
+        totalAmount: quantity.times(unitAmount),
+        sourceType: 'ONE_TIME_CHARGE',
+        chargeCategory: data.chargeCategory,
+        createdBy: actorId,
+      },
+    });
+
+    await this.recomputeTotal(tx, tenantId, invoiceId, actorId);
+    const invoice = await findOrThrow('Invoice', invoiceId, () =>
+      tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }),
+    );
+    return { lineItem, invoice };
+  }
+
   issue(tenantId: string, invoiceId: string, data: IssueData, actorId: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
@@ -295,44 +471,6 @@ export class InvoiceRepository {
     });
   }
 
-  recordPayment(tenantId: string, invoiceId: string, data: RecordPaymentData, actorId: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
-      if (!PAYABLE_STATUSES.includes(invoice.status)) {
-        throw new InvoiceConflictError('Payments can only be recorded against an issued invoice');
-      }
-
-      const amount = new Prisma.Decimal(data.amount);
-
-      const paidSoFarAgg = await tx.payment.aggregate({
-        where: { invoiceId, tenantId, deletedAt: null },
-        _sum: { amount: true },
-      });
-      const paidSoFar = paidSoFarAgg._sum.amount ?? new Prisma.Decimal(0);
-      const newTotal = paidSoFar.plus(amount);
-
-      if (newTotal.greaterThan(invoice.totalAmount)) {
-        throw new InvoiceConflictError('This payment would exceed the outstanding balance');
-      }
-
-      const payment = await tx.payment.create({
-        data: {
-          tenantId,
-          invoiceId,
-          amount,
-          paymentMethod: data.paymentMethod,
-          paidAt: data.paidAt ? new Date(data.paidAt) : new Date(),
-          createdBy: actorId,
-        },
-      });
-
-      const status = newTotal.equals(invoice.totalAmount) ? 'PAID' : 'PARTIALLY_PAID';
-      await tx.invoice.update({ where: { id: invoiceId }, data: { status, updatedBy: actorId } });
-
-      return payment;
-    });
-  }
-
   void(tenantId: string, invoiceId: string, actorId: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
@@ -344,21 +482,52 @@ export class InvoiceRepository {
     });
   }
 
+  /** Mirrors findPayments exactly - line items had no list endpoint at all until this one, discovered as a real gap while building the frontend (Invoice Detail has no other way to see what's on an invoice). */
+  findLineItems(tenantId: string, invoiceId: string, options: FindLineItemsOptions) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      await findOrThrow('Invoice', invoiceId, () =>
+        tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }),
+      );
+
+      const where: Prisma.InvoiceLineItemWhereInput = { tenantId, invoiceId, deletedAt: null };
+      const [items, total] = await Promise.all([
+        tx.invoiceLineItem.findMany({
+          where,
+          orderBy: { [options.sortBy]: options.sortOrder },
+          skip: (options.page - 1) * options.pageSize,
+          take: options.pageSize,
+        }),
+        tx.invoiceLineItem.count({ where }),
+      ]);
+
+      return { items, total };
+    });
+  }
+
+  /**
+   * Payment is no longer 1:1 with Invoice (PaymentService/
+   * PaymentAllocationService own recording now) - this read-only view joins
+   * through PaymentAllocation instead of querying Payment directly, per
+   * §11's "becomes a read-only view joining through PaymentAllocation"
+   * note. amountApplied is this invoice's own portion of a payment that may
+   * span several invoices, not the payment's full amount.
+   */
   findPayments(tenantId: string, invoiceId: string, options: FindPaymentsOptions) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       await findOrThrow('Invoice', invoiceId, () =>
         tx.invoice.findFirst({ where: { id: invoiceId, tenantId, deletedAt: null } }),
       );
 
-      const where: Prisma.PaymentWhereInput = { tenantId, invoiceId, deletedAt: null };
+      const where: Prisma.PaymentAllocationWhereInput = { tenantId, invoiceId, deletedAt: null };
       const [items, total] = await Promise.all([
-        tx.payment.findMany({
+        tx.paymentAllocation.findMany({
           where,
-          orderBy: { [options.sortBy]: options.sortOrder },
+          include: { payment: true },
+          orderBy: { payment: { [options.sortBy]: options.sortOrder } },
           skip: (options.page - 1) * options.pageSize,
           take: options.pageSize,
         }),
-        tx.payment.count({ where }),
+        tx.paymentAllocation.count({ where }),
       ]);
 
       return { items, total };
@@ -378,6 +547,34 @@ export class InvoiceRepository {
     });
     const totalAmount = agg._sum.totalAmount ?? new Prisma.Decimal(0);
     await tx.invoice.update({ where: { id: invoiceId }, data: { totalAmount, updatedBy: actorId } });
+  }
+
+  /**
+   * Composable, never opens its own transaction - called only by
+   * PaymentAllocationService.allocate, once per invoice it just wrote a
+   * PaymentAllocation row against. Recomputes Invoice payment status from
+   * the persisted PaymentAllocation rows themselves - the same
+   * recompute-from-the-live-rows idiom recomputeTotal already uses for
+   * totalAmount, applied to payment state instead. Deliberately takes no
+   * amount/delta parameter - always re-aggregates, never trusts a
+   * caller-supplied total, matching the "recompute via the single source
+   * of truth" discipline WaiverService.applyRetroactively's ISSUED branch
+   * already established this session. InvoiceService remains the sole
+   * owner of Invoice.status; PaymentAllocationService decides how much is
+   * applied and creates the PaymentAllocation row, but never writes to
+   * Invoice itself.
+   */
+  async recomputePaymentState(tx: Prisma.TransactionClient, tenantId: string, invoiceId: string, actorId: string) {
+    const invoice = await this.lockInvoice(tx, tenantId, invoiceId);
+
+    const agg = await tx.paymentAllocation.aggregate({
+      where: { invoiceId, tenantId, deletedAt: null },
+      _sum: { amountApplied: true },
+    });
+    const totalApplied = agg._sum.amountApplied ?? new Prisma.Decimal(0);
+
+    const status = totalApplied.greaterThanOrEqualTo(invoice.totalAmount) ? 'PAID' : 'PARTIALLY_PAID';
+    return tx.invoice.update({ where: { id: invoiceId }, data: { status, updatedBy: actorId } });
   }
 
   /**

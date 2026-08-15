@@ -17,14 +17,21 @@ describe('InvoiceService', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findOneOrThrow: jest.fn(),
+      findOneComposable: jest.fn(),
       update: jest.fn(),
       addLineItem: jest.fn(),
       updateLineItem: jest.fn(),
       removeLineItem: jest.fn(),
       issue: jest.fn(),
-      recordPayment: jest.fn(),
       void: jest.fn(),
       findPayments: jest.fn(),
+      findLineItems: jest.fn(),
+      replaceGeneratedLines: jest.fn(),
+      addExceptionLineItem: jest.fn(),
+      createComposable: jest.fn(),
+      findByBillingRunAndChild: jest.fn(),
+      findAllForBillingRun: jest.fn(),
+      recomputePaymentState: jest.fn(),
     } as unknown as jest.Mocked<InvoiceRepository>;
 
     currentTenant = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as unknown as jest.Mocked<CurrentTenantProvider>;
@@ -86,6 +93,22 @@ describe('InvoiceService', () => {
     });
   });
 
+  describe('findOneComposable', () => {
+    it('delegates to the repository with the caller-supplied tx', async () => {
+      repository.findOneComposable.mockResolvedValue({ id: 'invoice-1', status: 'DRAFT', billingRun: null } as never);
+
+      const result = await service.findOneComposable('tenant-1', 'invoice-1', 'tx' as never);
+
+      expect(repository.findOneComposable).toHaveBeenCalledWith('tenant-1', 'invoice-1', 'tx');
+      expect(result).toEqual({ id: 'invoice-1', status: 'DRAFT', billingRun: null });
+    });
+
+    it('translates a missing invoice into a 404', async () => {
+      repository.findOneComposable.mockRejectedValue(new EntityNotFoundError('Invoice', 'invoice-1'));
+      await expect(service.findOneComposable('tenant-1', 'invoice-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('update', () => {
     it('translates a non-draft conflict into a 409', async () => {
       repository.update.mockRejectedValue(new InvoiceConflictError('Only a draft invoice can be edited'));
@@ -132,36 +155,6 @@ describe('InvoiceService', () => {
     });
   });
 
-  describe('recordPayment', () => {
-    it('passes through to the repository', async () => {
-      const dto = { amount: 100, paymentMethod: 'CASH' as const };
-      repository.recordPayment.mockResolvedValue({ id: 'payment-1' } as never);
-
-      const result = await service.recordPayment('invoice-1', dto);
-
-      expect(repository.recordPayment).toHaveBeenCalledWith('tenant-1', 'invoice-1', dto, 'user-1');
-      expect(result).toEqual({ id: 'payment-1' });
-    });
-
-    it('translates an overpayment conflict into a 409', async () => {
-      repository.recordPayment.mockRejectedValue(
-        new InvoiceConflictError('This payment would exceed the outstanding balance'),
-      );
-      await expect(
-        service.recordPayment('invoice-1', { amount: 999, paymentMethod: 'CASH' as const }),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('translates a wrong-status conflict into a 409', async () => {
-      repository.recordPayment.mockRejectedValue(
-        new InvoiceConflictError('Payments can only be recorded against an issued invoice'),
-      );
-      await expect(
-        service.recordPayment('invoice-1', { amount: 10, paymentMethod: 'CASH' as const }),
-      ).rejects.toThrow(ConflictException);
-    });
-  });
-
   describe('void', () => {
     it('passes through to the repository', async () => {
       repository.void.mockResolvedValue({ id: 'invoice-1', status: 'VOID' } as never);
@@ -176,10 +169,55 @@ describe('InvoiceService', () => {
     });
   });
 
-  describe('findPayments', () => {
+  describe('findLineItems', () => {
     it('returns a paginated result built from the repository output', async () => {
+      repository.findLineItems.mockResolvedValue({
+        items: [{ id: 'line-item-1' }],
+        total: 1,
+      } as never);
+
+      const result = await service.findLineItems('invoice-1', {
+        page: 1,
+        pageSize: 20,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      } as never);
+
+      expect(repository.findLineItems).toHaveBeenCalledWith(
+        'tenant-1',
+        'invoice-1',
+        expect.objectContaining({ page: 1 }),
+      );
+      expect(result).toEqual({
+        data: [{ id: 'line-item-1' }],
+        meta: { total: 1, page: 1, pageSize: 20, totalPages: 1 },
+      });
+    });
+
+    it('translates a not-found invoice into a 404', async () => {
+      repository.findLineItems.mockRejectedValue(new EntityNotFoundError('Invoice', 'invoice-1'));
+      await expect(
+        service.findLineItems('invoice-1', {
+          page: 1,
+          pageSize: 20,
+          sortBy: 'createdAt',
+          sortOrder: 'desc',
+        } as never),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findPayments', () => {
+    it('maps each PaymentAllocation row (joined to its Payment) into a flat paginated result', async () => {
       repository.findPayments.mockResolvedValue({
-        items: [{ id: 'payment-1' }],
+        items: [
+          {
+            id: 'allocation-1',
+            paymentId: 'payment-1',
+            amountApplied: '100',
+            payment: { paymentMethod: 'CASH', paidAt: new Date('2026-01-01'), createdAt: new Date('2026-01-01') },
+          },
+        ],
         total: 1,
       } as never);
 
@@ -192,7 +230,16 @@ describe('InvoiceService', () => {
 
       expect(repository.findPayments).toHaveBeenCalledWith('tenant-1', 'invoice-1', expect.objectContaining({ page: 1 }));
       expect(result).toEqual({
-        data: [{ id: 'payment-1' }],
+        data: [
+          {
+            id: 'allocation-1',
+            paymentId: 'payment-1',
+            amountApplied: '100',
+            paymentMethod: 'CASH',
+            paidAt: new Date('2026-01-01'),
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
         meta: { total: 1, page: 1, pageSize: 20, totalPages: 1 },
       });
     });
@@ -202,6 +249,76 @@ describe('InvoiceService', () => {
       await expect(
         service.findPayments('invoice-1', { page: 1, pageSize: 20, sortBy: 'paidAt', sortOrder: 'desc' } as never),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('recomputePaymentState', () => {
+    it('delegates to the repository with the caller-supplied tx', async () => {
+      repository.recomputePaymentState.mockResolvedValue({ id: 'invoice-1', status: 'PARTIALLY_PAID' } as never);
+
+      const result = await service.recomputePaymentState('tx' as never, 'tenant-1', 'invoice-1', 'user-1');
+
+      expect(repository.recomputePaymentState).toHaveBeenCalledWith('tx', 'tenant-1', 'invoice-1', 'user-1');
+      expect(result).toEqual({ id: 'invoice-1', status: 'PARTIALLY_PAID' });
+    });
+  });
+
+  describe('replaceGeneratedLines', () => {
+    it('delegates to the repository with the caller-supplied tx', async () => {
+      repository.replaceGeneratedLines.mockResolvedValue({ id: 'invoice-1' } as never);
+      const drafts = [{ sourceType: 'PLAN_TUITION', description: 'Tuition', quantity: '1', unitAmount: '1000', totalAmount: '1000' }] as never;
+
+      const result = await service.replaceGeneratedLines('tx' as never, 'tenant-1', 'invoice-1', drafts, 'user-1');
+
+      expect(repository.replaceGeneratedLines).toHaveBeenCalledWith('tx', 'tenant-1', 'invoice-1', drafts, 'user-1');
+      expect(result).toEqual({ id: 'invoice-1' });
+    });
+
+    it('translates a non-DRAFT invoice into a 409', async () => {
+      repository.replaceGeneratedLines.mockRejectedValue(
+        new InvoiceConflictError('Only a draft invoice can have its generated lines replaced'),
+      );
+      await expect(
+        service.replaceGeneratedLines('tx' as never, 'tenant-1', 'invoice-1', [], 'user-1'),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('addExceptionLineItem', () => {
+    it('delegates to the repository and returns both the line item and the current invoice', async () => {
+      repository.addExceptionLineItem.mockResolvedValue({
+        lineItem: { id: 'line-1' },
+        invoice: { id: 'invoice-1', status: 'ISSUED' },
+      } as never);
+      const data = { description: 'Late pickup', quantity: 1, unitAmount: 25, chargeCategory: 'LATE_PICKUP' };
+
+      const result = await service.addExceptionLineItem('tx' as never, 'tenant-1', 'invoice-1', data, 'user-1');
+
+      expect(repository.addExceptionLineItem).toHaveBeenCalledWith('tx', 'tenant-1', 'invoice-1', data, 'user-1');
+      expect(result).toEqual({ lineItem: { id: 'line-1' }, invoice: { id: 'invoice-1', status: 'ISSUED' } });
+    });
+  });
+
+  describe('createComposable / findByBillingRunAndChild / findAllForBillingRun', () => {
+    it('delegates createComposable to the repository', async () => {
+      repository.createComposable.mockResolvedValue({ id: 'invoice-1' } as never);
+      const data = { childId: 'child-1', billedToGuardianId: 'guardian-1', billingRunId: 'run-1' };
+
+      await service.createComposable('tx' as never, 'tenant-1', data, 'user-1');
+
+      expect(repository.createComposable).toHaveBeenCalledWith('tx', 'tenant-1', data, 'user-1');
+    });
+
+    it('delegates findByBillingRunAndChild to the repository', async () => {
+      repository.findByBillingRunAndChild.mockResolvedValue(null);
+      await service.findByBillingRunAndChild('tenant-1', 'run-1', 'child-1', 'tx' as never);
+      expect(repository.findByBillingRunAndChild).toHaveBeenCalledWith('tenant-1', 'run-1', 'child-1', 'tx');
+    });
+
+    it('delegates findAllForBillingRun to the repository', async () => {
+      repository.findAllForBillingRun.mockResolvedValue([]);
+      await service.findAllForBillingRun('tenant-1', 'run-1');
+      expect(repository.findAllForBillingRun).toHaveBeenCalledWith('tenant-1', 'run-1', undefined);
     });
   });
 });

@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import { OpenBillingTermsDto } from '../../enrollment-billing-terms/dto/open-billing-terms.dto';
 
 /**
  * No status field - the service derives it (classroomId present -> ACTIVE,
@@ -21,4 +23,13 @@ export class CreateEnrollmentDto {
   @IsString()
   @MaxLength(500)
   createdReason?: string;
+
+  @ApiPropertyOptional({
+    type: OpenBillingTermsDto,
+    description: 'Optional - omit to enroll without billing terms yet',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OpenBillingTermsDto)
+  billingTerms?: OpenBillingTermsDto;
 }
