@@ -25,7 +25,12 @@ function buildUrl(path: string, query?: Record<string, QueryValue>): string {
 
 async function parseJson<T>(res: Response): Promise<T | undefined> {
   const text = await res.text();
-  return text ? (JSON.parse(text) as T) : undefined;
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
