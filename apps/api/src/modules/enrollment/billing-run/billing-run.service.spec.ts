@@ -135,12 +135,52 @@ describe('BillingRunService', () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
-    it('throws a 409 when the run already has invoices and none are still DRAFT', async () => {
-      invoice.findAllForBillingRun.mockResolvedValue([{ status: 'ISSUED' }, { status: 'PAID' }] as never);
+    it('throws a 409 when the run already has invoices, none are still DRAFT, and no eligible child is missing one', async () => {
+      // Matches the default eligible-children mock ([{ childId: 'child-1' }]) -
+      // every eligible child already has a non-draft invoice, so there is
+      // genuinely nothing left to do.
+      invoice.findAllForBillingRun.mockResolvedValue([
+        { childId: 'child-1', status: 'ISSUED' },
+        { childId: 'child-1', status: 'PAID' },
+      ] as never);
 
       await expect(
         service.generateForPeriod({ periodStart: '2026-09-01', periodEnd: '2026-09-30' }),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('does not throw when every existing invoice is non-DRAFT but an eligible child has no invoice yet (Round D fix)', async () => {
+      billingTerms.findChildrenWithEffectiveTermsForPeriod.mockResolvedValue([
+        { childId: 'child-1' }, // already issued, below
+        { childId: 'child-2' }, // newly eligible, no invoice yet
+      ] as never);
+      invoice.findAllForBillingRun.mockResolvedValue([{ childId: 'child-1', status: 'ISSUED' }] as never);
+      invoice.findByBillingRunAndChild.mockImplementation((_t, _runId, childId) =>
+        Promise.resolve(childId === 'child-1' ? ({ id: 'invoice-1' } as never) : null),
+      );
+      // child-1's existing ISSUED invoice can't be regenerated - the real,
+      // unchanged immutability enforcement in InvoiceRepository - so the
+      // service must still see it fail per-child rather than the whole run
+      // being rejected up front.
+      invoice.replaceGeneratedLines.mockImplementation((_tx, _t, invoiceId) =>
+        invoiceId === 'invoice-1'
+          ? Promise.reject(new Error('Only a draft invoice can have its generated lines replaced'))
+          : Promise.resolve({ id: 'invoice-2' } as never),
+      );
+
+      const result = await service.generateForPeriod({ periodStart: '2026-09-01', periodEnd: '2026-09-30' });
+
+      // child-2 (newly eligible, no existing invoice) gets a fresh DRAFT invoice.
+      expect(invoice.createComposable).toHaveBeenCalledWith(
+        'tx',
+        'tenant-1',
+        { childId: 'child-2', billedToGuardianId: 'guardian-1', billingRunId: 'run-1' },
+        'user-1',
+      );
+      // child-1's already-issued invoice is left alone - never even attempted for creation.
+      expect(invoice.createComposable).toHaveBeenCalledTimes(1);
+      // Not everyone regenerated cleanly (child-1 couldn't be), so PARTIAL_FAILURE.
+      expect(result.status).toBe('PARTIAL_FAILURE');
     });
 
     it('does not throw when at least one invoice under the run is still DRAFT', async () => {

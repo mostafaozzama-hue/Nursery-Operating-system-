@@ -445,7 +445,6 @@ export class EnrollmentBillingTermsRepository {
         status: { in: [...OCCUPIED_STATUSES] },
         startDate: { lt: periodEndDate },
         OR: [{ endDate: null }, { endDate: { gt: periodStartDate } }],
-        billingTerms: { some: {} },
       },
       select: { childId: true },
       distinct: ['childId'],

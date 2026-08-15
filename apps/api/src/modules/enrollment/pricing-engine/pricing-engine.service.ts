@@ -79,10 +79,21 @@ export class PricingEngineService {
     );
 
     // ---- Fees ----
+    // Only RECURRING mandatory PlanFees are auto-generated here, every
+    // period. A ONE_TIME mandatory PlanFee (e.g. a registration fee) is
+    // never included by this recurring computation - InvoiceLineItem has no
+    // fee_id, so there is no reliable way to tell "already charged, don't
+    // repeat" from "never charged, needs to go on" at this layer, and
+    // GENERATED_SOURCE_TYPES (FEE included) is wiped and rebuilt from
+    // scratch on every regeneration regardless. The existing
+    // OneTimeChargeService (sourceType ONE_TIME_CHARGE, explicitly excluded
+    // from that wipe/rebuild set - see InvoiceRepository) is the mechanism
+    // for exactly this: OWNER/ADMIN/STAFF add it once, deliberately, and it
+    // survives every later regeneration untouched.
     let feesSubtotal = ZERO;
     if (terms.planId) {
       const planFees = await this.planFee.findForPlanComposable(tenantId, terms.planId, tx);
-      for (const planFee of planFees.filter((pf) => pf.isMandatory)) {
+      for (const planFee of planFees.filter((pf) => pf.isMandatory && pf.fee.type === 'RECURRING')) {
         feesSubtotal = feesSubtotal.plus(planFee.fee.amount);
         drafts.push(buildDraft('FEE', planFee.fee.name, planFee.fee.amount));
       }

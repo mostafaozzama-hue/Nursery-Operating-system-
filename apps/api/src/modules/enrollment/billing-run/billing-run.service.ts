@@ -42,14 +42,6 @@ export class BillingRunService {
   private async run(tenantId: string, periodStart: string, periodEnd: string, triggeredBy: string) {
     const billingRun = await this.repository.upsertForPeriod(tenantId, periodStart, periodEnd, triggeredBy);
 
-    // EXPLICIT: "already fully ISSUED... nothing left to regenerate" - never
-    // thrown for the ordinary idempotent-rerun case (no invoices yet, or at
-    // least one still DRAFT).
-    const existingInvoices = await this.invoice.findAllForBillingRun(tenantId, billingRun.id);
-    if (existingInvoices.length > 0 && existingInvoices.every((i) => i.status !== OPEN_INVOICE_STATUS)) {
-      throw new BillingRunConflictError('This billing run has already been fully issued - nothing left to regenerate');
-    }
-
     // Approved interpretation: "eligible children" reuses
     // countEligibleSiblings' own ACTIVE/SUSPENDED-overlap definition, tenant-wide.
     const eligibleChildren = await this.billingTerms.findChildrenWithEffectiveTermsForPeriod(
@@ -57,6 +49,26 @@ export class BillingRunService {
       periodStart,
       periodEnd,
     );
+
+    // EXPLICIT: "already fully ISSUED... nothing left to regenerate" - never
+    // thrown for the ordinary idempotent-rerun case (no invoices yet, at
+    // least one still DRAFT, or an eligible child who has no invoice in this
+    // run yet). Checking only existingInvoices here would wrongly block a
+    // child who becomes eligible for this period *after* every
+    // already-attached invoice was issued - fixed live during the MVP trial
+    // (Round D): existingInvoices.every(...) alone can never distinguish
+    // "nothing left to regenerate" from "nothing has been generated yet for
+    // this specific child," so it's now compared against eligibleChildren.
+    const existingInvoices = await this.invoice.findAllForBillingRun(tenantId, billingRun.id);
+    const invoicedChildIds = new Set(existingInvoices.map((i) => i.childId));
+    const hasUninvoicedEligibleChild = eligibleChildren.some((c) => !invoicedChildIds.has(c.childId));
+    if (
+      existingInvoices.length > 0 &&
+      existingInvoices.every((i) => i.status !== OPEN_INVOICE_STATUS) &&
+      !hasUninvoicedEligibleChild
+    ) {
+      throw new BillingRunConflictError('This billing run has already been fully issued - nothing left to regenerate');
+    }
 
     let anyFailed = false;
     for (const { childId } of eligibleChildren) {
