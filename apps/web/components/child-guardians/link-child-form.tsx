@@ -4,6 +4,7 @@ import { RELATIONSHIP_TYPES, type Child } from '@nursery-os/contracts';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChildPicker } from '@/components/child-guardians/child-picker';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
@@ -19,6 +20,8 @@ import {
 } from '@/lib/child-guardians/schema';
 import { fullName } from '@/lib/children/mapper';
 import { useChild } from '@/lib/children/queries';
+import { fullName as guardianFullName } from '@/lib/guardians/mapper';
+import { useGuardian } from '@/lib/guardians/queries';
 import { cn } from '@/lib/utils';
 
 type LinkChildFormProps = { guardianId: string } & (
@@ -33,6 +36,13 @@ export function LinkChildForm(props: LinkChildFormProps) {
   const existingLinks = useGuardianChildren(guardianId);
   const existingLink = useChildGuardian(isEdit ? props.linkId : null);
   const existingChild = useChild(isEdit && existingLink.data ? existingLink.data.childId : null);
+
+  // Resolves the breadcrumb's guardianId segment (ux-debt.md UXD-2) - the
+  // registration Guardian Detail made for this same ID is torn down on
+  // unmount the moment we navigate here, so this nested route re-fetches
+  // and re-registers it itself rather than inheriting a stale/absent label.
+  const guardian = useGuardian(guardianId);
+  useBreadcrumbLabel(guardianId, guardian.data ? guardianFullName(guardian.data) : undefined);
 
   const { mutate: linkGuardian, isPending: isCreating, error: createError } = useLinkGuardian();
   const {

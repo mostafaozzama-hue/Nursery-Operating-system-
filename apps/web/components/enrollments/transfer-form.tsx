@@ -4,9 +4,12 @@ import type { Classroom } from '@nursery-os/contracts';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ClassroomPicker } from '@/components/classrooms/classroom-picker';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
+import { fullName } from '@/lib/children/mapper';
+import { useChild } from '@/lib/children/queries';
 import { useTransferEnrollment } from '@/lib/enrollments/mutations';
 import { useEnrollment } from '@/lib/enrollments/queries';
 import {
@@ -20,6 +23,12 @@ import { cn } from '@/lib/utils';
 export function TransferForm({ childId, enrollmentId }: { childId: string; enrollmentId: string }) {
   const router = useRouter();
   const existing = useEnrollment(enrollmentId);
+  // Resolves the breadcrumb's childId segment (ux-debt.md UXD-2) - the
+  // registration Child Detail made for this same ID is torn down on unmount
+  // the moment we navigate here, so this nested route re-fetches and
+  // re-registers it itself rather than inheriting a stale/absent label.
+  const child = useChild(childId);
+  useBreadcrumbLabel(childId, child.data ? fullName(child.data) : undefined);
   const { mutate: transferEnrollment, isPending, error: submitError } = useTransferEnrollment();
 
   const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);

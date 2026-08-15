@@ -4,6 +4,7 @@ import { RELATIONSHIP_TYPES, type Guardian } from '@nursery-os/contracts';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { GuardianPicker } from '@/components/child-guardians/guardian-picker';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
@@ -17,6 +18,8 @@ import {
   toUpdateChildGuardianRequest,
   type LinkFormValues,
 } from '@/lib/child-guardians/schema';
+import { fullName as childFullName } from '@/lib/children/mapper';
+import { useChild } from '@/lib/children/queries';
 import { fullName } from '@/lib/guardians/mapper';
 import { useGuardian } from '@/lib/guardians/queries';
 import { cn } from '@/lib/utils';
@@ -35,6 +38,13 @@ export function LinkGuardianForm(props: LinkGuardianFormProps) {
   const existingGuardian = useGuardian(
     isEdit && existingLink.data ? existingLink.data.guardianId : null,
   );
+
+  // Resolves the breadcrumb's childId segment (ux-debt.md UXD-2) - the
+  // registration Child Detail made for this same ID is torn down on unmount
+  // the moment we navigate here, so this nested route re-fetches and
+  // re-registers it itself rather than inheriting a stale/absent label.
+  const child = useChild(childId);
+  useBreadcrumbLabel(childId, child.data ? childFullName(child.data) : undefined);
 
   const { mutate: linkGuardian, isPending: isCreating, error: createError } = useLinkGuardian();
   const {

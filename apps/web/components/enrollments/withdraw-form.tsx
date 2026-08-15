@@ -2,9 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
+import { fullName } from '@/lib/children/mapper';
+import { useChild } from '@/lib/children/queries';
 import { useWithdrawEnrollment } from '@/lib/enrollments/mutations';
 import {
   emptyReasonFormValues,
@@ -16,6 +19,12 @@ import { cn } from '@/lib/utils';
 
 export function WithdrawForm({ childId, enrollmentId }: { childId: string; enrollmentId: string }) {
   const router = useRouter();
+  // Resolves the breadcrumb's childId segment (ux-debt.md UXD-2) - the
+  // registration Child Detail made for this same ID is torn down on unmount
+  // the moment we navigate here, so this nested route re-fetches and
+  // re-registers it itself rather than inheriting a stale/absent label.
+  const child = useChild(childId);
+  useBreadcrumbLabel(childId, child.data ? fullName(child.data) : undefined);
   const { mutate: withdrawEnrollment, isPending, error: submitError } = useWithdrawEnrollment();
 
   const [values, setValues] = useState<ReasonFormValues>(emptyReasonFormValues);
