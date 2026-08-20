@@ -38,43 +38,86 @@ export class WaiverRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   create(tenantId: string, childId: string, data: CreateData, approvedBy: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      await findOrThrow('Child', childId, () =>
-        tx.child.findFirst({ where: { id: childId, tenantId, deletedAt: null } }),
+    return withTenantContext(this.prisma, tenantId, (tx) => this.createWithinTx(tx, tenantId, childId, data, approvedBy));
+  }
+
+  /**
+   * tx-accepting primitive (Easy Enrollment, Product Gap H phase 2) - same
+   * pattern as ChildRepository.createWithinTx (see its doc comment).
+   * create() above is a thin wrapper opening its own transaction;
+   * AdmissionRepository composes this directly inside its own single
+   * transaction so a waiver attached during enrollment commits or rolls
+   * back with everything else, while every existing check (review-or-
+   * expiry, reasonNote-for-OTHER, duplicate-detection) stays unchanged.
+   */
+  async createWithinTx(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    childId: string,
+    data: CreateData,
+    approvedBy: string,
+  ) {
+    await findOrThrow('Child', childId, () =>
+      tx.child.findFirst({ where: { id: childId, tenantId, deletedAt: null } }),
+    );
+
+    const effectiveFrom = new Date(data.effectiveFrom.slice(0, 10));
+    const effectiveTo = data.effectiveTo ? new Date(data.effectiveTo.slice(0, 10)) : undefined;
+    const reviewAnnually = data.reviewAnnually ?? false;
+
+    // effectiveTo-or-reviewAnnually is also enforced by the DB CHECK
+    // waivers_review_or_expiry_required - this app-layer check exists to
+    // return a clean 409 instead of a raw constraint-violation 500.
+    if (!effectiveTo && !reviewAnnually) {
+      throw new WaiverConflictError('effectiveTo must be set unless reviewAnnually is true');
+    }
+    if (effectiveTo && effectiveTo <= effectiveFrom) {
+      throw new WaiverConflictError('effectiveTo must be after effectiveFrom');
+    }
+    if (data.reasonCode === 'OTHER' && !data.reasonNote) {
+      throw new WaiverConflictError('reasonNote is required when reasonCode is OTHER');
+    }
+
+    // Waiver bug fix (Easy Enrollment, Product Gap H phase 2). Additive
+    // stacking across genuinely different waivers stays fully intact
+    // (PricingEngineService is unchanged) - this only rejects an exact,
+    // literal duplicate: same type + percentage + reasonCode, with an
+    // effective period overlapping the new one. That's the safe signal
+    // the existing model already carries (no fuzzy matching); a real
+    // second reason for a reduction (e.g. hardship *and* a staff-benefit
+    // waiver) has a different reasonCode or percentage and is unaffected.
+    const duplicate = await tx.waiver.findFirst({
+      where: {
+        tenantId,
+        childId,
+        deletedAt: null,
+        type: data.type,
+        percentage: data.percentage,
+        reasonCode: data.reasonCode,
+        effectiveFrom: { lte: effectiveTo ?? new Date('9999-12-31') },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
+      },
+    });
+    if (duplicate) {
+      throw new WaiverConflictError(
+        'An identical waiver (same type, percentage, and reason) is already active for this child in an overlapping period',
       );
+    }
 
-      const effectiveFrom = new Date(data.effectiveFrom.slice(0, 10));
-      const effectiveTo = data.effectiveTo ? new Date(data.effectiveTo.slice(0, 10)) : undefined;
-      const reviewAnnually = data.reviewAnnually ?? false;
-
-      // effectiveTo-or-reviewAnnually is also enforced by the DB CHECK
-      // waivers_review_or_expiry_required - this app-layer check exists to
-      // return a clean 409 instead of a raw constraint-violation 500.
-      if (!effectiveTo && !reviewAnnually) {
-        throw new WaiverConflictError('effectiveTo must be set unless reviewAnnually is true');
-      }
-      if (effectiveTo && effectiveTo <= effectiveFrom) {
-        throw new WaiverConflictError('effectiveTo must be after effectiveFrom');
-      }
-      if (data.reasonCode === 'OTHER' && !data.reasonNote) {
-        throw new WaiverConflictError('reasonNote is required when reasonCode is OTHER');
-      }
-
-      return tx.waiver.create({
-        data: {
-          tenantId,
-          childId,
-          type: data.type,
-          percentage: data.percentage,
-          reasonCode: data.reasonCode,
-          reasonNote: data.reasonNote,
-          effectiveFrom,
-          effectiveTo,
-          reviewAnnually,
-          approvedBy,
-          createdBy: approvedBy,
-        },
-      });
+    return tx.waiver.create({
+      data: {
+        tenantId,
+        childId,
+        type: data.type,
+        percentage: data.percentage,
+        reasonCode: data.reasonCode,
+        reasonNote: data.reasonNote,
+        effectiveFrom,
+        effectiveTo,
+        reviewAnnually,
+        approvedBy,
+        createdBy: approvedBy,
+      },
     });
   }
 
@@ -127,6 +170,27 @@ export class WaiverRepository {
           reviewAnnually: data.reviewAnnually,
           updatedBy,
         },
+      });
+    });
+  }
+
+  /**
+   * Waiver bug fix (Easy Enrollment, Product Gap H phase 2): real removal,
+   * using this codebase's existing universal soft-delete convention
+   * (ADR-0013) - Waiver already has the deletedAt/deletedBy columns, they
+   * were just never exposed. The additive-stacking model is untouched;
+   * this only lets a mistaken waiver be taken off, the same "Remove" every
+   * other entity in this app already has.
+   */
+  softDelete(tenantId: string, id: string, deletedBy: string) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      await findOrThrow('Waiver', id, () =>
+        tx.waiver.findFirst({ where: { id, tenantId, deletedAt: null } }),
+      );
+
+      await tx.waiver.update({
+        where: { id },
+        data: { deletedAt: new Date(), deletedBy },
       });
     });
   }

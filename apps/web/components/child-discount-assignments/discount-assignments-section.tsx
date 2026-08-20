@@ -3,6 +3,7 @@
 import type { ChildDiscountAssignment, DiscountType } from '@nursery-os/contracts';
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
+import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { DataTable, type DataTableColumn } from '@/components/common/data-table';
 import { Badge } from '@/components/common/badge';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,7 @@ import {
 import { isApiError } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth';
 import { formatEffectiveRange } from '@/lib/child-discount-assignments/mapper';
-import { useAssignChildDiscount } from '@/lib/child-discount-assignments/mutations';
+import { useAssignChildDiscount, useRemoveChildDiscount } from '@/lib/child-discount-assignments/mutations';
 import { useChildDiscountAssignments } from '@/lib/child-discount-assignments/queries';
 import { useDiscountDirectory } from '@/lib/discounts/queries';
 import { formatMoney } from '@/lib/money';
@@ -52,19 +53,45 @@ export function DiscountAssignmentsSection({ childId }: { childId: string }) {
     isPending: isAssigning,
     error: assignError,
   } = useAssignChildDiscount();
+  const {
+    mutate: removeDiscount,
+    isPending: isRemoving,
+    error: removeError,
+  } = useRemoveChildDiscount();
 
   const [showAssignForm, setShowAssignForm] = useState(false);
   const [selectedDiscountId, setSelectedDiscountId] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
   const [pendingExpire, setPendingExpire] = useState<ChildDiscountAssignment | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<ChildDiscountAssignment | null>(null);
 
-  const openDiscountIds = new Set(
-    data.filter((assignment) => !assignment.effectiveTo).map((assignment) => assignment.discountId),
+  const openAssignments = data.filter((assignment) => !assignment.effectiveTo);
+  const openDiscountIds = new Set(openAssignments.map((assignment) => assignment.discountId));
+  // Discount bug fix (Easy Enrollment, Product Gap H phase 2): once an
+  // exclusive (non-stackable) discount is open, the picker no longer offers
+  // *any* other exclusive discount - only the same one already assigned
+  // (excluded above) or stackable ones remain pickable. Mirrors the backend
+  // conflict check in ChildDiscountAssignmentRepository.assign exactly, so
+  // the UI never lets a user attempt a request the API would reject anyway.
+  const hasOpenExclusive = openAssignments.some(
+    (assignment) => discountsById.get(assignment.discountId)?.stackable === false,
   );
   const availableDiscounts = allDiscounts.filter(
-    (discount) => discount.isActive && !openDiscountIds.has(discount.id),
+    (discount) =>
+      discount.isActive && !openDiscountIds.has(discount.id) && !(hasOpenExclusive && !discount.stackable),
   );
+
+  const handleConfirmRemove = async () => {
+    if (!pendingRemove) return;
+    try {
+      await removeDiscount(childId, pendingRemove.discountId);
+      setPendingRemove(null);
+      refetch();
+    } catch {
+      // dialog stays open for the user to retry or cancel
+    }
+  };
 
   const resetAssignForm = () => {
     setShowAssignForm(false);
@@ -100,7 +127,17 @@ export function DiscountAssignmentsSection({ childId }: { childId: string }) {
     type === 'PERCENTAGE' ? `${amount}%` : formatMoney(amount);
 
   const columns: DataTableColumn<ChildDiscountAssignment>[] = [
-    { header: 'Discount', cell: (assignment) => discountName(assignment.discountId) },
+    {
+      header: 'Discount',
+      cell: (assignment) => (
+        <span className="inline-flex items-center gap-2">
+          {discountName(assignment.discountId)}
+          {discountsById.get(assignment.discountId)?.stackable === false && (
+            <Badge variant="muted">Exclusive</Badge>
+          )}
+        </span>
+      ),
+    },
     {
       header: 'Amount',
       cell: (assignment) =>
@@ -124,9 +161,14 @@ export function DiscountAssignmentsSection({ childId }: { childId: string }) {
             header: 'Actions',
             cell: (assignment: ChildDiscountAssignment) =>
               !assignment.effectiveTo ? (
-                <Button variant="ghost" size="sm" onClick={() => setPendingExpire(assignment)}>
-                  Expire
-                </Button>
+                <span className="inline-flex gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => setPendingExpire(assignment)}>
+                    Expire
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setPendingRemove(assignment)}>
+                    Remove
+                  </Button>
+                </span>
               ) : null,
           },
         ]
@@ -172,6 +214,12 @@ export function DiscountAssignmentsSection({ childId }: { childId: string }) {
                   ))}
                 </SelectContent>
               </Select>
+            )}
+            {hasOpenExclusive && (
+              <p className="text-xs text-muted-foreground">
+                An exclusive discount is already active - only stackable discounts can be added
+                alongside it. Remove the exclusive one first to assign a different exclusive discount.
+              </p>
             )}
           </div>
 
@@ -226,13 +274,20 @@ export function DiscountAssignmentsSection({ childId }: { childId: string }) {
           </Button>
         </div>
       ) : (
-        <DataTable
-          columns={columns}
-          rows={data}
-          rowKey={(assignment) => assignment.id}
-          isLoading={isLoading}
-          emptyMessage="No discounts assigned yet."
-        />
+        <>
+          <DataTable
+            columns={columns}
+            rows={data}
+            rowKey={(assignment) => assignment.id}
+            isLoading={isLoading}
+            emptyMessage="No discounts assigned yet."
+          />
+          {removeError != null && (
+            <p className="text-sm text-destructive">
+              {isApiError(removeError) ? removeError.message : 'Something went wrong.'}
+            </p>
+          )}
+        </>
       )}
 
       <ExpireChildDiscountSheet
@@ -244,6 +299,20 @@ export function DiscountAssignmentsSection({ childId }: { childId: string }) {
           setPendingExpire(null);
           refetch();
         }}
+      />
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        onOpenChange={(open) => !open && setPendingRemove(null)}
+        title="Remove discount"
+        description={
+          pendingRemove
+            ? `Are you sure you want to remove "${discountName(pendingRemove.discountId)}" from this child? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Remove"
+        isPending={isRemoving}
+        onConfirm={handleConfirmRemove}
       />
     </Card>
   );

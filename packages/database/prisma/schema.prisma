@@ -208,6 +208,14 @@ model Child {
   dateOfBirth DateTime  @map("date_of_birth") @db.Date
   gender      String?
   photoUrl    String?   @map("photo_url")
+
+  // Easy Enrollment (Product Gap H). Nullable, display/admission fields -
+  // no business rule depends on them, same tier as gender/photoUrl.
+  nickname      String?
+  nationality   String?
+  motherLanguage String?  @map("mother_language")
+  address       String?
+
   createdBy   String?   @map("created_by") @db.Uuid
   updatedBy   String?   @map("updated_by") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -242,6 +250,12 @@ model Enrollment {
   status        String
   startDate     DateTime  @map("start_date") @db.Date
   endDate       DateTime? @map("end_date") @db.Date
+  // Easy Enrollment (Product Gap H, phase 2). User-entered expected/target
+  // withdrawal date, purely informational - distinct from endDate above,
+  // which is the real lifecycle/history field set only by transfer/withdraw.
+  // Never used to close an enrollment, never auto-invented. Nullable/optional
+  // by design; the UI warns when it's missing but never blocks save on it.
+  plannedEndDate DateTime? @map("planned_end_date") @db.Date
   createdReason String?   @map("created_reason")
   endedReason   String?   @map("ended_reason")
   createdBy     String?   @map("created_by") @db.Uuid
@@ -283,6 +297,8 @@ model Guardian {
   lastName  String    @map("last_name")
   phone     String?
   email     String?
+  // Easy Enrollment (Product Gap H). Nullable - no business rule depends on it.
+  address   String?
   createdBy String?   @map("created_by") @db.Uuid
   updatedBy String?   @map("updated_by") @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at")
@@ -355,6 +371,38 @@ model Staff {
   lastName    String    @map("last_name")
   position    String?
   hireDate    DateTime? @map("hire_date") @db.Date
+
+  // Basic profile (Product Gap v2, Group B). Sensitive personal fields -
+  // employeeId/phone/email/address/nationality/gender/dateOfBirth/
+  // identificationType/identificationNumber - are stripped from the response
+  // for any non-OWNER/ADMIN caller by StaffService (see
+  // staff-sensitive-fields.ts), not just hidden in the frontend. photoUrl and
+  // preferredName are display identity, not sensitive, so they stay visible
+  // to STAFF the same as firstName/lastName always have been.
+  photoUrl              String?   @map("photo_url")
+  preferredName         String?   @map("preferred_name")
+  employeeId            String?   @map("employee_id")
+  phone                 String?
+  email                 String?
+  address               String?
+  nationality           String?
+  gender                String?
+  dateOfBirth           DateTime? @map("date_of_birth") @db.Date
+  identificationType    String?   @map("identification_type")
+  identificationNumber  String?   @map("identification_number")
+
+  // Professional information (Product Gap v2, Group B). Operational, not
+  // sensitive - visible to STAFF same as position/hireDate always have been.
+  department        String?
+  yearsOfExperience Int?     @map("years_of_experience")
+  languages         String[] @default([])
+  qualifications    String?
+  certifications    String?
+  // ACTIVE/ON_LEAVE/SUSPENDED/TERMINATED - same free-string-with-a-known-set
+  // convention as User.status/Tenant.status/TenantMembership.status, not a
+  // new enum mechanism.
+  employmentStatus  String   @default("ACTIVE") @map("employment_status")
+
   createdBy   String?   @map("created_by") @db.Uuid
   updatedBy   String?   @map("updated_by") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at")

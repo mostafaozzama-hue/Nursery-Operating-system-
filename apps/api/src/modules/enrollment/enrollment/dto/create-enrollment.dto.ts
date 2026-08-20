@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import { IsDateString, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 import { OpenBillingTermsDto } from '../../enrollment-billing-terms/dto/open-billing-terms.dto';
 
 /**
@@ -23,6 +23,14 @@ export class CreateEnrollmentDto {
   @IsString()
   @MaxLength(500)
   createdReason?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'User-entered expected/target withdrawal date - informational only, distinct from the system-managed endDate. Never auto-invented; omit if unknown.',
+  })
+  @IsOptional()
+  @IsDateString()
+  plannedEndDate?: string;
 
   @ApiPropertyOptional({
     type: OpenBillingTermsDto,

@@ -70,4 +70,12 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsIn(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
   LOG_LEVEL: string = 'info';
+
+  // Easy Enrollment (Product Gap H, phase 2): local-disk MVP for Child photo
+  // upload - relative to process.cwd() unless an absolute path is given. A
+  // deliberate single-instance limitation, not object storage - see
+  // ChildPhotoStorageService's doc comment.
+  @IsOptional()
+  @IsString()
+  UPLOADS_DIR: string = './uploads';
 }

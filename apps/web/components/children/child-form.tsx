@@ -3,12 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
+import { PhotoUploadField } from '@/components/children/photo-upload-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
-import { fullName } from '@/lib/children/mapper';
-import { useCreateChild, useUpdateChild } from '@/lib/children/mutations';
+import { fullName, resolvePhotoUrl } from '@/lib/children/mapper';
+import { useCreateChild, useUpdateChild, useUploadChildPhoto } from '@/lib/children/mutations';
 import { useChild } from '@/lib/children/queries';
 import {
   childFormSchema,
@@ -25,6 +26,12 @@ export function ChildForm(props: ChildFormProps) {
   const existing = useChild(isEdit ? props.childId : null);
   const { mutate: createChild, isPending: isCreating, error: createError } = useCreateChild();
   const { mutate: updateChild, isPending: isUpdating, error: updateError } = useUpdateChild();
+  const {
+    mutate: uploadPhoto,
+    isPending: isUploadingPhoto,
+    error: photoError,
+  } = useUploadChildPhoto();
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
 
   useBreadcrumbLabel(
     isEdit ? props.childId : undefined,
@@ -44,6 +51,10 @@ export function ChildForm(props: ChildFormProps) {
         dateOfBirth: existing.data.dateOfBirth.slice(0, 10),
         gender: existing.data.gender ?? '',
         photoUrl: existing.data.photoUrl ?? '',
+        nickname: existing.data.nickname ?? '',
+        nationality: existing.data.nationality ?? '',
+        motherLanguage: existing.data.motherLanguage ?? '',
+        address: existing.data.address ?? '',
       });
     }
   }, [isEdit, existing.data]);
@@ -71,6 +82,16 @@ export function ChildForm(props: ChildFormProps) {
         props.mode === 'edit'
           ? await updateChild(props.childId, toCreateChildRequest(result.data))
           : await createChild(toCreateChildRequest(result.data));
+
+      if (pendingPhotoFile) {
+        // Best-effort: the child record itself already saved successfully
+        // regardless of this outcome, so a photo failure here is never a
+        // half-created record - just a missing photo, fixable later from
+        // Edit. Not surfaced beyond this navigation for this rare edge
+        // case; a known, small limitation, not silently pretended away.
+        await uploadPhoto(child.id, pendingPhotoFile).catch(() => undefined);
+      }
+
       router.push(`/dashboard/children/${child.id}`);
     } catch {
       // surfaced via createError/updateError below
@@ -90,10 +111,16 @@ export function ChildForm(props: ChildFormProps) {
   }
 
   const submitError = createError ?? updateError;
-  const isSubmitting = isCreating || isUpdating;
+  const isSubmitting = isCreating || isUpdating || isUploadingPhoto;
 
   return (
     <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
+      <PhotoUploadField
+        previewUrl={isEdit && existing.data ? resolvePhotoUrl(existing.data) : null}
+        onFileSelected={setPendingPhotoFile}
+        disabled={isSubmitting}
+        error={photoError != null ? (isApiError(photoError) ? photoError.message : 'Photo upload failed.') : undefined}
+      />
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="firstName">First name</Label>
         <Input id="firstName" value={values.firstName} onChange={setField('firstName')} />
@@ -123,9 +150,25 @@ export function ChildForm(props: ChildFormProps) {
         <Input id="gender" autoComplete="off" value={values.gender} onChange={setField('gender')} />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="photoUrl">Photo URL</Label>
-        <Input id="photoUrl" value={values.photoUrl} onChange={setField('photoUrl')} />
-        {fieldErrors.photoUrl && <p className="text-sm text-destructive">{fieldErrors.photoUrl}</p>}
+        <Label htmlFor="nickname">Nickname</Label>
+        <Input id="nickname" autoComplete="off" value={values.nickname} onChange={setField('nickname')} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="nationality">Nationality</Label>
+        <Input id="nationality" autoComplete="off" value={values.nationality} onChange={setField('nationality')} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="motherLanguage">Mother language</Label>
+        <Input
+          id="motherLanguage"
+          autoComplete="off"
+          value={values.motherLanguage}
+          onChange={setField('motherLanguage')}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="address">Address</Label>
+        <Input id="address" autoComplete="off" value={values.address} onChange={setField('address')} />
       </div>
 
       {submitError != null && (

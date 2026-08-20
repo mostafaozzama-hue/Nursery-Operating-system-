@@ -4,6 +4,7 @@ import type { Waiver } from '@nursery-os/contracts';
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
 import { Badge } from '@/components/common/badge';
+import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { DataTable, type DataTableColumn } from '@/components/common/data-table';
 import { Button } from '@/components/ui/button';
 import { isApiError } from '@/lib/api/errors';
@@ -12,6 +13,7 @@ import {
   WAIVER_REASON_CODE_LABEL,
   WAIVER_TYPE_LABEL,
 } from '@/lib/waivers/mapper';
+import { useRemoveWaiver } from '@/lib/waivers/mutations';
 import { useChildWaivers } from '@/lib/waivers/queries';
 import { WaiverSheet } from './waiver-sheet';
 
@@ -24,6 +26,8 @@ export function WaiversSection({ childId }: { childId: string }) {
   const { data, isLoading, error, refetch } = useChildWaivers(childId);
   const [sheetTarget, setSheetTarget] = useState<Waiver | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<Waiver | null>(null);
+  const { mutate: removeWaiver, isPending: isRemoving } = useRemoveWaiver();
 
   const openCreate = () => {
     setSheetTarget(null);
@@ -33,6 +37,17 @@ export function WaiversSection({ childId }: { childId: string }) {
   const openEdit = (waiver: Waiver) => {
     setSheetTarget(waiver);
     setSheetOpen(true);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!pendingRemove) return;
+    try {
+      await removeWaiver(childId, pendingRemove.id);
+      setPendingRemove(null);
+      refetch();
+    } catch {
+      // dialog stays open for the user to retry or cancel
+    }
   };
 
   const columns: DataTableColumn<Waiver>[] = [
@@ -51,9 +66,14 @@ export function WaiversSection({ childId }: { childId: string }) {
     {
       header: 'Actions',
       cell: (waiver) => (
-        <Button variant="ghost" size="sm" onClick={() => openEdit(waiver)}>
-          Edit
-        </Button>
+        <span className="inline-flex gap-1">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(waiver)}>
+            Edit
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setPendingRemove(waiver)}>
+            Remove
+          </Button>
+        </span>
       ),
     },
   ];
@@ -95,6 +115,20 @@ export function WaiversSection({ childId }: { childId: string }) {
           setSheetOpen(false);
           refetch();
         }}
+      />
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        onOpenChange={(open) => !open && setPendingRemove(null)}
+        title="Remove waiver"
+        description={
+          pendingRemove
+            ? `Are you sure you want to remove this ${WAIVER_TYPE_LABEL[pendingRemove.type].toLowerCase()} waiver? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Remove"
+        isPending={isRemoving}
+        onConfirm={handleConfirmRemove}
       />
     </Card>
   );

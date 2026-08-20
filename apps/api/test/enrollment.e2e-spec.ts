@@ -192,6 +192,36 @@ describe('Enrollment module (e2e)', () => {
     expect(forbiddenRes.status).toBe(403);
   });
 
+  it('plannedEndDate (Easy Enrollment, Product Gap H phase 2): settable at create, editable via PATCH, clearable to null, never affects endDate/status', async () => {
+    const agent = await loginAs(ownerAEmail);
+    const childId = await createChild(agent, 'PlannedEndDate');
+
+    const createRes = await agent.post('/enrollments').send({ childId, plannedEndDate: '2027-06-30' });
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.plannedEndDate.slice(0, 10)).toBe('2027-06-30');
+    expect(createRes.body.endDate).toBeNull();
+    expect(createRes.body.status).toBe('WAITLISTED');
+
+    const patchRes = await agent
+      .patch(`/enrollments/${createRes.body.id}`)
+      .send({ plannedEndDate: '2027-12-31' });
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body.plannedEndDate.slice(0, 10)).toBe('2027-12-31');
+
+    const clearRes = await agent
+      .patch(`/enrollments/${createRes.body.id}`)
+      .send({ plannedEndDate: null });
+    expect(clearRes.status).toBe(200);
+    expect(clearRes.body.plannedEndDate).toBeNull();
+  });
+
+  it('omitting plannedEndDate at create leaves it null - never auto-invented', async () => {
+    const agent = await loginAs(ownerAEmail);
+    const childId = await createChild(agent, 'NoPlannedEndDate');
+    const res = await agent.post('/enrollments').send({ childId });
+    expect(res.body.plannedEndDate).toBeNull();
+  });
+
   it('does not expose a DELETE route', async () => {
     const agent = await loginAs(ownerAEmail);
     const childId = await createChild(agent, 'NoDelete');

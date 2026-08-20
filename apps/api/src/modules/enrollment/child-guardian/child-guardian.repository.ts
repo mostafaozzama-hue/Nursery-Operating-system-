@@ -40,41 +40,57 @@ export class ChildGuardianRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   create(tenantId: string, data: CreateData, createdBy: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      await findOrThrow('Child', data.childId, () =>
-        tx.child.findFirst({ where: { id: data.childId, tenantId, deletedAt: null } }),
-      );
-      await findOrThrow('Guardian', data.guardianId, () =>
-        tx.guardian.findFirst({ where: { id: data.guardianId, tenantId, deletedAt: null } }),
-      );
+    return withTenantContext(this.prisma, tenantId, (tx) => this.createWithinTx(tx, tenantId, data, createdBy));
+  }
 
-      const existingPairing = await tx.childGuardian.findFirst({
-        where: { tenantId, childId: data.childId, guardianId: data.guardianId, deletedAt: null },
-      });
-      if (existingPairing) {
-        throw new ChildGuardianConflictError('This guardian is already linked to this child');
-      }
+  /**
+   * tx-accepting primitive (Easy Enrollment, Product Gap H) - same pattern as
+   * ChildRepository.createWithinTx. create() above is a thin wrapper opening
+   * its own transaction; AdmissionRepository composes this directly inside
+   * its own single transaction for each child<->guardian link, so the
+   * already-linked and one-primary-per-child rules still run unchanged.
+   */
+  async createWithinTx(tx: Prisma.TransactionClient, tenantId: string, data: CreateData, createdBy: string) {
+    await findOrThrow('Child', data.childId, () =>
+      tx.child.findFirst({ where: { id: data.childId, tenantId, deletedAt: null } }),
+    );
+    await findOrThrow('Guardian', data.guardianId, () =>
+      tx.guardian.findFirst({ where: { id: data.guardianId, tenantId, deletedAt: null } }),
+    );
 
-      if (data.isPrimaryContact) {
-        await this.assertNoExistingPrimary(tx, tenantId, data.childId);
-      }
+    const existingPairing = await tx.childGuardian.findFirst({
+      where: { tenantId, childId: data.childId, guardianId: data.guardianId, deletedAt: null },
+    });
+    if (existingPairing) {
+      throw new ChildGuardianConflictError('This guardian is already linked to this child');
+    }
 
-      return tx.childGuardian.create({
-        data: {
-          tenantId,
-          childId: data.childId,
-          guardianId: data.guardianId,
-          relationshipType: data.relationshipType,
-          isPrimaryContact: data.isPrimaryContact ?? false,
-          isEmergencyContact: data.isEmergencyContact ?? false,
-          canPickup: data.canPickup ?? false,
-          createdBy,
-        },
-      });
+    if (data.isPrimaryContact) {
+      await this.assertNoExistingPrimary(tx, tenantId, data.childId);
+    }
+
+    return tx.childGuardian.create({
+      data: {
+        tenantId,
+        childId: data.childId,
+        guardianId: data.guardianId,
+        relationshipType: data.relationshipType,
+        isPrimaryContact: data.isPrimaryContact ?? false,
+        isEmergencyContact: data.isEmergencyContact ?? false,
+        canPickup: data.canPickup ?? false,
+        createdBy,
+      },
     });
   }
 
-  findMany(tenantId: string, options: FindManyOptions) {
+  /**
+   * classroomId (Product Gap v2 Part 2), when passed, restricts to links
+   * whose child is currently enrolled in that classroom - this is the
+   * mechanism the Child detail page's "Guardians" section reaches guardians
+   * through, so scoping it is what actually closes "access guardians
+   * through a Classroom B child."
+   */
+  findMany(tenantId: string, options: FindManyOptions, classroomId?: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const where: Prisma.ChildGuardianWhereInput = {
         tenantId,
@@ -84,6 +100,9 @@ export class ChildGuardianRepository {
         ...(options.isPrimaryContact !== undefined ? { isPrimaryContact: options.isPrimaryContact } : {}),
         ...(options.isEmergencyContact !== undefined ? { isEmergencyContact: options.isEmergencyContact } : {}),
         ...(options.canPickup !== undefined ? { canPickup: options.canPickup } : {}),
+        ...(classroomId
+          ? { child: { enrollments: { some: { classroomId, endDate: null, status: 'ACTIVE', deletedAt: null } } } }
+          : {}),
       };
 
       const [items, total] = await Promise.all([
@@ -100,10 +119,23 @@ export class ChildGuardianRepository {
     });
   }
 
-  findOneOrThrow(tenantId: string, id: string) {
+  findOneOrThrow(tenantId: string, id: string, classroomId?: string) {
     return withTenantContext(this.prisma, tenantId, (tx) =>
       findOrThrow('ChildGuardian', id, () =>
-        tx.childGuardian.findFirst({ where: { id, tenantId, deletedAt: null } }),
+        tx.childGuardian.findFirst({
+          where: {
+            id,
+            tenantId,
+            deletedAt: null,
+            ...(classroomId
+              ? {
+                  child: {
+                    enrollments: { some: { classroomId, endDate: null, status: 'ACTIVE', deletedAt: null } },
+                  },
+                }
+              : {}),
+          },
+        }),
       ),
     );
   }

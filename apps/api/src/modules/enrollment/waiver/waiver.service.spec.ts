@@ -31,6 +31,7 @@ describe('WaiverService', () => {
     repository = {
       create: jest.fn(),
       update: jest.fn(),
+      softDelete: jest.fn(),
       findForChild: jest.fn(),
       findEffectiveForPeriod: jest.fn(),
       findOneComposable: jest.fn().mockResolvedValue({ id: 'waiver-1', reasonCode: 'HARDSHIP', reasonNote: null }),
@@ -132,6 +133,19 @@ describe('WaiverService', () => {
     it('translates a missing Waiver into a 404', async () => {
       repository.update.mockRejectedValue(new EntityNotFoundError('Waiver', 'waiver-1'));
       await expect(service.update('waiver-1', {} as never)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('remove', () => {
+    it('passes the resolved tenant, id, and deletedBy to the repository', async () => {
+      repository.softDelete.mockResolvedValue(undefined as never);
+      await service.remove('waiver-1');
+      expect(repository.softDelete).toHaveBeenCalledWith('tenant-1', 'waiver-1', 'user-1');
+    });
+
+    it('translates a missing Waiver into a 404', async () => {
+      repository.softDelete.mockRejectedValue(new EntityNotFoundError('Waiver', 'waiver-1'));
+      await expect(service.remove('waiver-1')).rejects.toThrow(NotFoundException);
     });
   });
 

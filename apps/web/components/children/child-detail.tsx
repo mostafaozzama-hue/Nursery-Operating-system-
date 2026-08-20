@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { DiscountAssignmentsSection } from '@/components/child-discount-assignments/discount-assignments-section';
 import { FeeAssignmentsSection } from '@/components/child-fee-assignments/fee-assignments-section';
 import { LinkedGuardiansSection } from '@/components/child-guardians/linked-guardians-section';
+import { Card } from '@/components/common/card';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { EnrollmentSection } from '@/components/enrollments/enrollment-section';
 import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
@@ -14,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { WaiversSection } from '@/components/waivers/waivers-section';
 import { isApiError } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth';
-import { formatDateOfBirth, fullName } from '@/lib/children/mapper';
+import { formatDateOfBirth, fullName, resolvePhotoUrl } from '@/lib/children/mapper';
 import { useDeleteChild } from '@/lib/children/mutations';
 import { useChild } from '@/lib/children/queries';
 
@@ -57,12 +58,36 @@ export function ChildDetail({ childId }: { childId: string }) {
   return (
     <div className="flex flex-col gap-4">
       <PageTitle>{fullName(data)}</PageTitle>
-      <dl className="grid max-w-md grid-cols-2 gap-2 text-sm">
-        <dt className="text-muted-foreground">Date of birth</dt>
-        <dd>{formatDateOfBirth(data.dateOfBirth)}</dd>
-        <dt className="text-muted-foreground">Gender</dt>
-        <dd>{data.gender ?? '—'}</dd>
-      </dl>
+      <Card>
+        <div className="flex gap-4">
+          {resolvePhotoUrl(data) ? (
+            // eslint-disable-next-line @next/next/no-img-element -- API-streamed photo, not a Next/Image-optimizable source.
+            <img
+              src={resolvePhotoUrl(data)!}
+              alt=""
+              className="size-20 shrink-0 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <div className="flex size-20 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs text-muted-foreground">
+              No photo
+            </div>
+          )}
+          <dl className="grid max-w-md grid-cols-2 gap-x-8 gap-y-3 text-sm">
+            <dt className="text-muted-foreground">Nickname</dt>
+            <dd>{data.nickname ?? '—'}</dd>
+            <dt className="text-muted-foreground">Date of birth</dt>
+            <dd>{formatDateOfBirth(data.dateOfBirth)}</dd>
+            <dt className="text-muted-foreground">Gender</dt>
+            <dd>{data.gender ?? '—'}</dd>
+            <dt className="text-muted-foreground">Nationality</dt>
+            <dd>{data.nationality ?? '—'}</dd>
+            <dt className="text-muted-foreground">Mother language</dt>
+            <dd>{data.motherLanguage ?? '—'}</dd>
+            <dt className="text-muted-foreground">Address</dt>
+            <dd>{data.address ?? '—'}</dd>
+          </dl>
+        </div>
+      </Card>
 
       {canManage && (
         <div className="flex gap-2">

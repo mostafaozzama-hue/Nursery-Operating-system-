@@ -16,6 +16,7 @@ describe('ChildDiscountAssignmentService', () => {
     repository = {
       assign: jest.fn(),
       expire: jest.fn(),
+      softDelete: jest.fn(),
       findForChild: jest.fn(),
       findEffectiveForPeriod: jest.fn(),
     } as unknown as jest.Mocked<ChildDiscountAssignmentRepository>;
@@ -88,6 +89,21 @@ describe('ChildDiscountAssignmentService', () => {
       await expect(service.expire('child-1', 'discount-1', { effectiveTo: '2026-12-01' })).rejects.toThrow(
         ConflictException,
       );
+    });
+  });
+
+  describe('remove', () => {
+    it('passes tenant, childId, discountId, and user to the repository', async () => {
+      repository.softDelete.mockResolvedValue(undefined as never);
+      await service.remove('child-1', 'discount-1');
+      expect(repository.softDelete).toHaveBeenCalledWith('tenant-1', 'child-1', 'discount-1', 'user-1');
+    });
+
+    it('translates a ChildDiscountAssignmentConflictError into a 409', async () => {
+      repository.softDelete.mockRejectedValue(
+        new ChildDiscountAssignmentConflictError('This Discount is not currently assigned to this Child'),
+      );
+      await expect(service.remove('child-1', 'discount-1')).rejects.toThrow(ConflictException);
     });
   });
 

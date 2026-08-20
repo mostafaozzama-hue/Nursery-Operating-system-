@@ -39,6 +39,7 @@ interface CreateData {
   childId: string;
   classroomId?: string;
   createdReason?: string;
+  plannedEndDate?: string;
   billingTerms?: CreateBillingTermsData;
 }
 
@@ -53,6 +54,7 @@ interface WithdrawData {
 
 interface UpdateData {
   createdReason?: string;
+  plannedEndDate?: string | null;
 }
 
 @Injectable()
@@ -64,47 +66,65 @@ export class EnrollmentRepository {
   ) {}
 
   create(tenantId: string, data: CreateData, createdBy: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      await findOrThrow('Child', data.childId, () =>
-        tx.child.findFirst({ where: { id: data.childId, tenantId, deletedAt: null } }),
-      );
-
-      let status: EnrollmentStatus = 'WAITLISTED';
-      if (data.classroomId) {
-        await this.capacity.assertCapacityAvailable(tx, tenantId, data.classroomId);
-        status = 'ACTIVE';
-      }
-
-      const enrollment = await tx.enrollment.create({
-        data: {
-          tenantId,
-          childId: data.childId,
-          classroomId: data.classroomId,
-          status,
-          startDate: new Date(),
-          createdReason: data.createdReason,
-          createdBy,
-        },
-      });
-
-      // Billing terms are optional at creation (see CreateEnrollmentDto) - the
-      // already-shipped POST /enrollments contract stays backward-compatible
-      // for callers that don't send them.
-      if (data.billingTerms) {
-        await this.billingTerms.openWithEnrollment(tx, tenantId, enrollment.id, data.billingTerms, createdBy);
-      }
-
-      return enrollment;
-    });
+    return withTenantContext(this.prisma, tenantId, (tx) => this.createWithinTx(tx, tenantId, data, createdBy));
   }
 
-  findMany(tenantId: string, options: FindManyOptions) {
+  /**
+   * tx-accepting primitive (Easy Enrollment, Product Gap H) - same pattern as
+   * EnrollmentBillingTermsRepository.openWithEnrollment, which this method
+   * already composes. create() above is a thin wrapper opening its own
+   * transaction; AdmissionRepository composes this directly inside its own
+   * single transaction so the new Child/Guardian rows and this Enrollment
+   * (+ optional billing terms) commit or roll back together, while capacity
+   * checking and billing-terms opening stay exactly as they are today.
+   */
+  async createWithinTx(tx: Prisma.TransactionClient, tenantId: string, data: CreateData, createdBy: string) {
+    await findOrThrow('Child', data.childId, () =>
+      tx.child.findFirst({ where: { id: data.childId, tenantId, deletedAt: null } }),
+    );
+
+    let status: EnrollmentStatus = 'WAITLISTED';
+    if (data.classroomId) {
+      await this.capacity.assertCapacityAvailable(tx, tenantId, data.classroomId);
+      status = 'ACTIVE';
+    }
+
+    const enrollment = await tx.enrollment.create({
+      data: {
+        tenantId,
+        childId: data.childId,
+        classroomId: data.classroomId,
+        status,
+        startDate: new Date(),
+        createdReason: data.createdReason,
+        plannedEndDate: data.plannedEndDate ? new Date(data.plannedEndDate.slice(0, 10)) : undefined,
+        createdBy,
+      },
+    });
+
+    // Billing terms are optional at creation (see CreateEnrollmentDto) - the
+    // already-shipped POST /enrollments contract stays backward-compatible
+    // for callers that don't send them.
+    if (data.billingTerms) {
+      await this.billingTerms.openWithEnrollment(tx, tenantId, enrollment.id, data.billingTerms, createdBy);
+    }
+
+    return enrollment;
+  }
+
+  /**
+   * classroomScope (Product Gap v2 Part 2), when passed, always wins over
+   * a client-supplied options.classroomId - a scoped STAFF caller can never
+   * widen their own view by passing a different classroomId.
+   */
+  findMany(tenantId: string, options: FindManyOptions, classroomScope?: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
+      const effectiveClassroomId = classroomScope !== undefined ? classroomScope : options.classroomId;
       const where: Prisma.EnrollmentWhereInput = {
         tenantId,
         deletedAt: null,
         ...(options.childId ? { childId: options.childId } : {}),
-        ...(options.classroomId ? { classroomId: options.classroomId } : {}),
+        ...(effectiveClassroomId ? { classroomId: effectiveClassroomId } : {}),
         ...(options.status ? { status: options.status } : {}),
         ...(options.open !== undefined ? { endDate: options.open ? null : { not: null } } : {}),
       };
@@ -123,11 +143,15 @@ export class EnrollmentRepository {
     });
   }
 
-  findOneOrThrow(tenantId: string, id: string) {
+  findOneOrThrow(tenantId: string, id: string, classroomScope?: string) {
     return withTenantContext(this.prisma, tenantId, (tx) =>
-      findOrThrow('Enrollment', id, () =>
-        tx.enrollment.findFirst({ where: { id, tenantId, deletedAt: null } }),
-      ),
+      findOrThrow('Enrollment', id, async () => {
+        const record = await tx.enrollment.findFirst({ where: { id, tenantId, deletedAt: null } });
+        if (record && classroomScope !== undefined && record.classroomId !== classroomScope) {
+          return null;
+        }
+        return record;
+      }),
     );
   }
 
@@ -139,7 +163,16 @@ export class EnrollmentRepository {
 
       return tx.enrollment.update({
         where: { id },
-        data: { ...data, updatedBy },
+        data: {
+          createdReason: data.createdReason,
+          plannedEndDate:
+            data.plannedEndDate === undefined
+              ? undefined
+              : data.plannedEndDate === null
+                ? null
+                : new Date(data.plannedEndDate.slice(0, 10)),
+          updatedBy,
+        },
       });
     });
   }

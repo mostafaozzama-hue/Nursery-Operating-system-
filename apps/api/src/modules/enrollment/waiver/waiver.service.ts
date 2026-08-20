@@ -44,6 +44,13 @@ export class WaiverService {
     return this.repository.update(tenantId, id, dto, updatedBy).catch((error) => this.translateConflict(error));
   }
 
+  /** Waiver bug fix (Easy Enrollment, Product Gap H phase 2) - see WaiverRepository.softDelete's doc comment. */
+  remove(id: string) {
+    const tenantId = this.currentTenant.getTenantId();
+    const deletedBy = this.currentUser.getUserId();
+    return this.repository.softDelete(tenantId, id, deletedBy).catch((error) => this.translateConflict(error));
+  }
+
   async findForChild(childId: string, query: WaiverQueryDto) {
     const tenantId = this.currentTenant.getTenantId();
     const { items, total } = await this.repository.findForChild(tenantId, childId, query).catch(translateNotFound);

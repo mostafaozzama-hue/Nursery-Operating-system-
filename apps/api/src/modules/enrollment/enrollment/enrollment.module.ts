@@ -9,5 +9,8 @@ import { EnrollmentService } from './enrollment.service';
   imports: [CapacityModule, EnrollmentBillingTermsModule],
   controllers: [EnrollmentController],
   providers: [EnrollmentService, EnrollmentRepository],
+  // EnrollmentRepository exported alongside the service (Easy Enrollment,
+  // Product Gap H) - see ChildModule's export comment for the precedent.
+  exports: [EnrollmentService, EnrollmentRepository],
 })
 export class EnrollmentModule {}

@@ -43,6 +43,7 @@ export function GuardianForm(props: GuardianFormProps) {
         lastName: existing.data.lastName,
         phone: existing.data.phone ?? '',
         email: existing.data.email ?? '',
+        address: existing.data.address ?? '',
       });
     }
   }, [isEdit, existing.data]);
@@ -114,6 +115,10 @@ export function GuardianForm(props: GuardianFormProps) {
         <Label htmlFor="email">Email</Label>
         <Input id="email" autoComplete="off" value={values.email} onChange={setField('email')} />
         {fieldErrors.email && <p className="text-sm text-destructive">{fieldErrors.email}</p>}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="address">Address</Label>
+        <Input id="address" autoComplete="off" value={values.address} onChange={setField('address')} />
       </div>
 
       {submitError != null && (

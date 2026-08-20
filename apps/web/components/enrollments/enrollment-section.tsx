@@ -42,6 +42,11 @@ export function EnrollmentSection({ childId }: { childId: string }) {
       header: 'End date',
       cell: (enrollment) => (enrollment.endDate ? formatEnrollmentDate(enrollment.endDate) : '—'),
     },
+    {
+      header: 'Planned end date',
+      cell: (enrollment) =>
+        enrollment.plannedEndDate ? formatEnrollmentDate(enrollment.plannedEndDate) : '—',
+    },
     { header: 'Created reason', cell: (enrollment) => enrollment.createdReason ?? '—' },
     { header: 'Ended reason', cell: (enrollment) => enrollment.endedReason ?? '—' },
     ...(canManage

@@ -8,8 +8,10 @@ import { useBreadcrumbLabel } from '@/components/layout/breadcrumb-context';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { isApiError } from '@/lib/api/errors';
+import { useChildGuardians } from '@/lib/child-guardians/queries';
 import { fullName } from '@/lib/children/mapper';
 import { useChild } from '@/lib/children/queries';
+import { useGuardianDirectory } from '@/lib/guardians/queries';
 import {
   emptyOpenBillingTermsFormValues,
   openBillingTermsFormSchema,
@@ -34,6 +36,14 @@ export function EnrollForm({ childId }: { childId: string }) {
   const child = useChild(childId);
   useBreadcrumbLabel(childId, child.data ? fullName(child.data) : undefined);
   const { mutate: createEnrollment, isPending, error: submitError } = useCreateEnrollment();
+
+  // Lifted from BillingTermsFields (Easy Enrollment, Product Gap H) so the
+  // wizard's Enrollment step can pass its own in-memory guardians instead.
+  const { data: childGuardianLinks } = useChildGuardians(childId);
+  const { byId: guardianById } = useGuardianDirectory();
+  const childGuardians = childGuardianLinks
+    .map((link) => guardianById.get(link.guardianId))
+    .filter((guardian): guardian is NonNullable<typeof guardian> => guardian != null);
 
   const [stage, setStage] = useState<'pick' | 'reason'>('pick');
   const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);
@@ -153,7 +163,7 @@ export function EnrollForm({ childId }: { childId: string }) {
         </Button>
       ) : (
         <BillingTermsFields
-          childId={childId}
+          guardians={childGuardians}
           values={billingTermsValues}
           onChange={(partial) => setBillingTermsValues((prev) => ({ ...prev, ...partial }))}
           fieldErrors={billingTermsFieldErrors}

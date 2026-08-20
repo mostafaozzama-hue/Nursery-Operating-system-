@@ -10,6 +10,11 @@ export const childFormSchema = z.object({
     .refine((value) => !Number.isNaN(Date.parse(value)), 'Enter a valid date'),
   gender: z.string().trim(),
   photoUrl: z.string().trim().refine(isBlankOrValidUrl, 'Enter a valid URL'),
+  // Easy Enrollment (Product Gap H). Nullable, display/admission fields.
+  nickname: z.string().trim(),
+  nationality: z.string().trim(),
+  motherLanguage: z.string().trim(),
+  address: z.string().trim(),
 });
 
 export type ChildFormValues = z.infer<typeof childFormSchema>;
@@ -20,6 +25,10 @@ export const emptyChildFormValues: ChildFormValues = {
   dateOfBirth: '',
   gender: '',
   photoUrl: '',
+  nickname: '',
+  nationality: '',
+  motherLanguage: '',
+  address: '',
 };
 
 export function toCreateChildRequest(values: ChildFormValues): CreateChildRequest {
@@ -29,6 +38,10 @@ export function toCreateChildRequest(values: ChildFormValues): CreateChildReques
     dateOfBirth: values.dateOfBirth,
     gender: values.gender.trim() || undefined,
     photoUrl: values.photoUrl.trim() || undefined,
+    nickname: values.nickname.trim() || undefined,
+    nationality: values.nationality.trim() || undefined,
+    motherLanguage: values.motherLanguage.trim() || undefined,
+    address: values.address.trim() || undefined,
   };
 }
 

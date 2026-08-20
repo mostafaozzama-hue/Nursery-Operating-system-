@@ -6,3 +6,6 @@ dist
 *.tsbuildinfo
 .env
 .env.local
+
+# Easy Enrollment (Product Gap H, phase 2) - local-disk MVP photo storage
+apps/api/uploads/

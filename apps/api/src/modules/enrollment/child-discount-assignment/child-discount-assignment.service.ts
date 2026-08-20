@@ -34,6 +34,15 @@ export class ChildDiscountAssignmentService {
       .catch((error) => this.translateConflict(error));
   }
 
+  /** Discount bug fix (Easy Enrollment, Product Gap H phase 2) - see ChildDiscountAssignmentRepository.softDelete's doc comment. */
+  remove(childId: string, discountId: string) {
+    const tenantId = this.currentTenant.getTenantId();
+    const userId = this.currentUser.getUserId();
+    return this.repository
+      .softDelete(tenantId, childId, discountId, userId)
+      .catch((error) => this.translateConflict(error));
+  }
+
   async findForChild(childId: string, query: ChildDiscountAssignmentQueryDto) {
     const tenantId = this.currentTenant.getTenantId();
     const { items, total } = await this.repository.findForChild(tenantId, childId, query).catch(translateNotFound);

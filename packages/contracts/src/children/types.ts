@@ -7,6 +7,11 @@ export interface Child {
   dateOfBirth: string;
   gender: string | null;
   photoUrl: string | null;
+  // Easy Enrollment (Product Gap H). Nullable, display/admission fields.
+  nickname: string | null;
+  nationality: string | null;
+  motherLanguage: string | null;
+  address: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +29,10 @@ export interface CreateChildRequest {
   dateOfBirth: string;
   gender?: string;
   photoUrl?: string;
+  nickname?: string;
+  nationality?: string;
+  motherLanguage?: string;
+  address?: string;
 }
 
 export type UpdateChildRequest = Partial<CreateChildRequest>;

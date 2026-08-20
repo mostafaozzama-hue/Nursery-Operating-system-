@@ -6,5 +6,8 @@ import { GuardianService } from './guardian.service';
 @Module({
   controllers: [GuardianController],
   providers: [GuardianService, GuardianRepository],
+  // GuardianRepository exported alongside the service (Easy Enrollment,
+  // Product Gap H) - see ChildModule's export comment for the precedent.
+  exports: [GuardianService, GuardianRepository],
 })
 export class GuardianModule {}

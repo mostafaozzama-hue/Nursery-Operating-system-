@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiPaginatedResponse } from '../../../common/pagination/api-paginated-response.decorator';
 import { Roles } from '../../identity/decorators/roles.decorator';
@@ -56,5 +69,22 @@ export class WaiverController {
   @ApiPaginatedResponse(WaiverResponseDto)
   findForChild(@Param('childId', ParseUUIDPipe) childId: string, @Query() query: WaiverQueryDto) {
     return this.waiverService.findForChild(childId, query);
+  }
+
+  /**
+   * Waiver bug fix (Easy Enrollment, Product Gap H phase 2) - real removal,
+   * using this codebase's existing universal soft-delete convention
+   * (ADR-0013), same as every other entity's DELETE route. The additive-
+   * stacking model itself is unchanged - this only lets a mistaken waiver
+   * be taken off.
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove a Waiver' })
+  @ApiParam({ name: 'childId', format: 'uuid' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiResponse({ status: 204 })
+  remove(@Param('childId', ParseUUIDPipe) _childId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.waiverService.remove(id);
   }
 }

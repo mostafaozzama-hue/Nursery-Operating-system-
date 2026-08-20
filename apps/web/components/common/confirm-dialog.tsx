@@ -17,6 +17,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   isPending,
   onConfirm,
 }: {
@@ -25,6 +26,8 @@ export function ConfirmDialog({
   title: string;
   description: string;
   confirmLabel?: string;
+  /** Enrollment Wizard's Cancel confirmation reuses this dialog with "Keep editing" here - the dismiss action reads oddly as "Cancel" when the whole dialog is itself about cancelling something. */
+  cancelLabel?: string;
   isPending?: boolean;
   onConfirm: () => void;
 }) {
@@ -36,7 +39,7 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
             disabled={isPending}
             onClick={(event) => {

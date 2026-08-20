@@ -36,13 +36,19 @@ async function parseJson<T>(res: Response): Promise<T | undefined> {
 /**
  * Single transport function for every endpoint module. Auth-refresh handling
  * (if ever added) belongs here so it never changes callers' signatures.
+ *
+ * FormData bodies (Easy Enrollment, Product Gap H phase 2 - photo upload)
+ * are passed through to fetch as-is, with no Content-Type header set - the
+ * browser generates the multipart boundary itself, which only happens
+ * correctly when it owns that header.
  */
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const isFormData = options.body instanceof FormData;
   const res = await fetch(buildUrl(path, options.query), {
     method: options.method ?? 'GET',
     credentials: 'include',
-    headers: options.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    headers: options.body !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : undefined,
+    body: options.body === undefined ? undefined : isFormData ? (options.body as FormData) : JSON.stringify(options.body),
   });
 
   const requestId = res.headers.get('X-Request-Id') ?? undefined;
@@ -66,6 +72,10 @@ export const get = <T, Q extends object = object>(path: string, query?: Q) =>
   });
 
 export const post = <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body });
+
+/** Easy Enrollment (Product Gap H, phase 2) - multipart uploads (Child photo). */
+export const postForm = <T>(path: string, formData: FormData) =>
+  request<T>(path, { method: 'POST', body: formData });
 
 export const patch = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'PATCH', body });

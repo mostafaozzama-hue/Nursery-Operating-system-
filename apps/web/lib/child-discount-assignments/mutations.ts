@@ -53,3 +53,10 @@ export function useExpireChildDiscount(): MutationResult<
     api.childDiscountAssignments.expire(childId, discountId, body),
   );
 }
+
+/** Discount bug fix (Easy Enrollment, Product Gap H phase 2). */
+export function useRemoveChildDiscount(): MutationResult<[string, string], void> {
+  return useApiMutation((childId: string, discountId: string) =>
+    api.childDiscountAssignments.remove(childId, discountId),
+  );
+}

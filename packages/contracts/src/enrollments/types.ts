@@ -13,6 +13,10 @@ export interface Enrollment {
   status: EnrollmentStatus;
   startDate: string;
   endDate: string | null;
+  // Easy Enrollment (Product Gap H, phase 2). User-entered expected/target
+  // withdrawal date - informational only, distinct from endDate (the real
+  // lifecycle field, set only by transfer/withdraw). Never auto-invented.
+  plannedEndDate: string | null;
   createdReason: string | null;
   endedReason: string | null;
   createdAt: string;
@@ -31,6 +35,7 @@ export interface CreateEnrollmentRequest {
   childId: string;
   classroomId?: string;
   createdReason?: string;
+  plannedEndDate?: string;
   billingTerms?: OpenBillingTermsRequest;
 }
 
@@ -45,4 +50,5 @@ export interface WithdrawEnrollmentRequest {
 
 export interface UpdateEnrollmentRequest {
   createdReason?: string;
+  plannedEndDate?: string | null;
 }

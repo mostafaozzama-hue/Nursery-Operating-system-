@@ -1,4 +1,6 @@
 import { INestApplication } from '@nestjs/common';
+import { promises as fs } from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { createTestApp } from './utils/test-app';
 import {
@@ -48,6 +50,15 @@ describe('Child module (e2e)', () => {
   });
 
   afterAll(async () => {
+    // Best-effort disk cleanup for any test photo uploads (Easy Enrollment,
+    // Product Gap H phase 2) - not a correctness concern (gitignored,
+    // tiny fixtures), just hygiene so repeated test runs don't accumulate.
+    await Promise.all(
+      createdChildIds.map((id) =>
+        fs.rm(path.resolve('./uploads', 'children', id), { recursive: true, force: true }).catch(() => undefined),
+      ),
+    );
+
     // Children reference tenants via FK - must be deleted before tenants.
     if (createdChildIds.length) {
       await superuserPrisma.child.deleteMany({ where: { id: { in: createdChildIds } } });
@@ -186,5 +197,117 @@ describe('Child module (e2e)', () => {
     // Confirm tenant A's data was genuinely untouched.
     const confirmAsA = await agentA.get(`/children/${childId}`);
     expect(confirmAsA.body.gender).toBeNull();
+  });
+
+  // Easy Enrollment (Product Gap H, phase 2) - local-disk MVP photo upload.
+  const PNG_1X1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  );
+
+  it('rejects unauthenticated photo upload and unauthenticated photo read', async () => {
+    const agent = await loginAs(ownerAEmail);
+    const childRes = await agent
+      .post('/children')
+      .send({ firstName: 'Photo', lastName: 'Unauth', dateOfBirth: '2022-01-01' });
+    createdChildIds.push(childRes.body.id);
+
+    const uploadRes = await request(app.getHttpServer())
+      .post(`/children/${childRes.body.id}/photo`)
+      .attach('photo', PNG_1X1, 'a.png');
+    expect(uploadRes.status).toBe(401);
+
+    const readRes = await request(app.getHttpServer()).get(`/children/${childRes.body.id}/photo`);
+    expect(readRes.status).toBe(401);
+  });
+
+  it('forbids STAFF from uploading a photo (403)', async () => {
+    const ownerAgent = await loginAs(ownerAEmail);
+    const childRes = await ownerAgent
+      .post('/children')
+      .send({ firstName: 'Photo', lastName: 'StaffForbidden', dateOfBirth: '2022-01-01' });
+    createdChildIds.push(childRes.body.id);
+
+    const staffAgent = await loginAs(staffAEmail);
+    const res = await staffAgent
+      .post(`/children/${childRes.body.id}/photo`)
+      .attach('photo', PNG_1X1, 'a.png');
+    expect(res.status).toBe(403);
+  });
+
+  it('404s reading a photo before any upload has happened', async () => {
+    const agent = await loginAs(ownerAEmail);
+    const childRes = await agent
+      .post('/children')
+      .send({ firstName: 'Photo', lastName: 'NoneYet', dateOfBirth: '2022-01-01' });
+    createdChildIds.push(childRes.body.id);
+
+    const res = await agent.get(`/children/${childRes.body.id}/photo`);
+    expect(res.status).toBe(404);
+  });
+
+  it('uploads a photo, stores a stable reference on photoUrl, and streams it back', async () => {
+    const agent = await loginAs(ownerAEmail);
+    const childRes = await agent
+      .post('/children')
+      .send({ firstName: 'Photo', lastName: 'Uploaded', dateOfBirth: '2022-01-01' });
+    createdChildIds.push(childRes.body.id);
+    const childId = childRes.body.id;
+
+    const uploadRes = await agent.post(`/children/${childId}/photo`).attach('photo', PNG_1X1, 'a.png');
+    expect(uploadRes.status).toBe(201);
+    expect(uploadRes.body.photoUrl).toBe(`/children/${childId}/photo`);
+
+    const getChildRes = await agent.get(`/children/${childId}`);
+    expect(getChildRes.body.photoUrl).toBe(`/children/${childId}/photo`);
+
+    const readRes = await agent.get(`/children/${childId}/photo`);
+    expect(readRes.status).toBe(200);
+    expect(Buffer.compare(readRes.body, PNG_1X1)).toBe(0);
+  });
+
+  it('replacing a photo keeps the same stable reference and serves the new content', async () => {
+    const agent = await loginAs(ownerAEmail);
+    const childRes = await agent
+      .post('/children')
+      .send({ firstName: 'Photo', lastName: 'Replaced', dateOfBirth: '2022-01-01' });
+    createdChildIds.push(childRes.body.id);
+    const childId = childRes.body.id;
+
+    const firstUpload = await agent.post(`/children/${childId}/photo`).attach('photo', PNG_1X1, 'a.png');
+    expect(firstUpload.body.photoUrl).toBe(`/children/${childId}/photo`);
+
+    const secondUpload = await agent.post(`/children/${childId}/photo`).attach('photo', PNG_1X1, 'b.png');
+    expect(secondUpload.body.photoUrl).toBe(`/children/${childId}/photo`);
+
+    const readRes = await agent.get(`/children/${childId}/photo`);
+    expect(readRes.status).toBe(200);
+  });
+
+  it('rejects a non-image file type', async () => {
+    const agent = await loginAs(ownerAEmail);
+    const childRes = await agent
+      .post('/children')
+      .send({ firstName: 'Photo', lastName: 'WrongType', dateOfBirth: '2022-01-01' });
+    createdChildIds.push(childRes.body.id);
+
+    const res = await agent
+      .post(`/children/${childRes.body.id}/photo`)
+      .attach('photo', Buffer.from('not an image'), { filename: 'a.txt', contentType: 'text/plain' });
+    expect(res.status).toBe(400);
+  });
+
+  it("tenant B cannot read tenant A's child photo (RLS isolation)", async () => {
+    const agentA = await loginAs(ownerAEmail);
+    const childRes = await agentA
+      .post('/children')
+      .send({ firstName: 'Photo', lastName: 'Isolated', dateOfBirth: '2022-01-01' });
+    createdChildIds.push(childRes.body.id);
+    const childId = childRes.body.id;
+    await agentA.post(`/children/${childId}/photo`).attach('photo', PNG_1X1, 'a.png');
+
+    const agentB = await loginAs(ownerBEmail);
+    const res = await agentB.get(`/children/${childId}/photo`);
+    expect(res.status).toBe(404);
   });
 });

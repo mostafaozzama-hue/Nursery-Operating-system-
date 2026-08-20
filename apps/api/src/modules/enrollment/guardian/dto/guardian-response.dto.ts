@@ -17,6 +17,9 @@ export class GuardianResponseDto {
   email!: string | null;
 
   @ApiPropertyOptional()
+  address!: string | null;
+
+  @ApiPropertyOptional()
   userId!: string | null;
 
   @ApiProperty()

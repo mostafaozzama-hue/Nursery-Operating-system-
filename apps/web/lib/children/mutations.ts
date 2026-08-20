@@ -43,3 +43,8 @@ export function useUpdateChild(): MutationResult<[string, UpdateChildRequest], C
 export function useDeleteChild(): MutationResult<[string], void> {
   return useApiMutation(api.children.remove);
 }
+
+/** Easy Enrollment (Product Gap H, phase 2) - local-disk MVP upload. */
+export function useUploadChildPhoto(): MutationResult<[string, File], Child> {
+  return useApiMutation((id: string, file: File) => api.children.uploadPhoto(id, file));
+}

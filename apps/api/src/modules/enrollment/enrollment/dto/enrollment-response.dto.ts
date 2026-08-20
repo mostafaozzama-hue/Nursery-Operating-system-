@@ -19,6 +19,12 @@ export class EnrollmentResponseDto {
   @ApiPropertyOptional()
   endDate!: Date | null;
 
+  @ApiPropertyOptional({
+    description:
+      'User-entered expected/target withdrawal date - informational only, distinct from endDate. Never used to close the enrollment.',
+  })
+  plannedEndDate!: Date | null;
+
   @ApiPropertyOptional()
   createdReason!: string | null;
 

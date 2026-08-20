@@ -29,6 +29,11 @@ export class CreateGuardianDto {
   @IsEmail()
   email?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @ApiPropertyOptional({ format: 'uuid', description: 'Links to an existing User with an active membership in this tenant' })
   @IsOptional()
   @IsUUID()

@@ -12,6 +12,11 @@ import { WaiverService } from './waiver.service';
   imports: [InvoiceModule, BillingRunModule, PricingEngineModule, CreditNoteModule, ManualOverrideModule],
   controllers: [WaiverController],
   providers: [WaiverService, WaiverRepository],
-  exports: [WaiverService],
+  // WaiverRepository exported alongside the service (Easy Enrollment,
+  // Product Gap H phase 2) - AdmissionRepository is a cross-module consumer
+  // that only needs the composable, explicit-tenantId createWithinTx
+  // primitive, same reason ChildModule/GuardianModule/etc already export
+  // theirs.
+  exports: [WaiverService, WaiverRepository],
 })
 export class WaiverModule {}

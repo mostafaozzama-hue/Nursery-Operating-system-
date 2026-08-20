@@ -43,3 +43,8 @@ export function useUpdateWaiver(): MutationResult<[string, string, UpdateWaiverR
     api.waivers.update(childId, id, body),
   );
 }
+
+/** Waiver bug fix (Easy Enrollment, Product Gap H phase 2). */
+export function useRemoveWaiver(): MutationResult<[string, string], void> {
+  return useApiMutation((childId: string, id: string) => api.waivers.remove(childId, id));
+}

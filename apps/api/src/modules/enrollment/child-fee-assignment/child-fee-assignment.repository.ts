@@ -38,35 +38,52 @@ export class ChildFeeAssignmentRepository {
    * as plan_fees' missing constraint.
    */
   assign(tenantId: string, childId: string, data: AssignData, createdBy: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      await findOrThrow('Child', childId, () =>
-        tx.child.findFirst({ where: { id: childId, tenantId, deletedAt: null } }),
-      );
+    return withTenantContext(this.prisma, tenantId, (tx) => this.assignWithinTx(tx, tenantId, childId, data, createdBy));
+  }
 
-      const fee = await findOrThrow('Fee', data.feeId, () =>
-        tx.fee.findFirst({ where: { id: data.feeId, tenantId, deletedAt: null } }),
-      );
-      if (!fee.isActive) {
-        throw new ChildFeeAssignmentConflictError('This Fee is inactive and cannot be newly assigned');
-      }
+  /**
+   * tx-accepting primitive (Easy Enrollment, Product Gap H phase 2) - same
+   * pattern as ChildRepository.createWithinTx (see its doc comment).
+   * assign() above is a thin wrapper opening its own transaction;
+   * AdmissionRepository composes this directly inside its own single
+   * transaction so a fee attached during enrollment commits or rolls back
+   * with everything else, while the existing-assignment/inactive-fee
+   * checks stay exactly as they are today.
+   */
+  async assignWithinTx(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    childId: string,
+    data: AssignData,
+    createdBy: string,
+  ) {
+    await findOrThrow('Child', childId, () =>
+      tx.child.findFirst({ where: { id: childId, tenantId, deletedAt: null } }),
+    );
 
-      const existingOpen = await tx.childFeeAssignment.findFirst({
-        where: { tenantId, childId, feeId: data.feeId, effectiveTo: null, deletedAt: null },
-      });
-      if (existingOpen) {
-        throw new ChildFeeAssignmentConflictError('This Fee is already assigned to this Child');
-      }
+    const fee = await findOrThrow('Fee', data.feeId, () =>
+      tx.fee.findFirst({ where: { id: data.feeId, tenantId, deletedAt: null } }),
+    );
+    if (!fee.isActive) {
+      throw new ChildFeeAssignmentConflictError('This Fee is inactive and cannot be newly assigned');
+    }
 
-      return tx.childFeeAssignment.create({
-        data: {
-          tenantId,
-          childId,
-          feeId: data.feeId,
-          snapshotAmount: fee.amount,
-          effectiveFrom: new Date(data.effectiveFrom.slice(0, 10)),
-          createdBy,
-        },
-      });
+    const existingOpen = await tx.childFeeAssignment.findFirst({
+      where: { tenantId, childId, feeId: data.feeId, effectiveTo: null, deletedAt: null },
+    });
+    if (existingOpen) {
+      throw new ChildFeeAssignmentConflictError('This Fee is already assigned to this Child');
+    }
+
+    return tx.childFeeAssignment.create({
+      data: {
+        tenantId,
+        childId,
+        feeId: data.feeId,
+        snapshotAmount: fee.amount,
+        effectiveFrom: new Date(data.effectiveFrom.slice(0, 10)),
+        createdBy,
+      },
     });
   }
 

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { isApiError } from '@/lib/api/errors';
+import { useChildGuardians } from '@/lib/child-guardians/queries';
 import { useChangeBillingTerms } from '@/lib/enrollment-billing-terms/mutations';
 import {
   changeBillingTermsFormSchema,
@@ -17,6 +18,7 @@ import {
   toOpenBillingTermsRequest,
   type ChangeBillingTermsFormValues,
 } from '@/lib/enrollment-billing-terms/schema';
+import { useGuardianDirectory } from '@/lib/guardians/queries';
 import { BillingTermsFields } from './billing-terms-fields';
 
 function fieldErrorsFrom(
@@ -57,6 +59,14 @@ export function BillingTermsSheet({
 }) {
   const isCreate = currentTerms === null;
   const { mutate: changeBillingTerms, isPending, error: submitError } = useChangeBillingTerms();
+
+  // Lifted from BillingTermsFields (Easy Enrollment, Product Gap H) - see
+  // that component's doc comment.
+  const { data: childGuardianLinks } = useChildGuardians(childId);
+  const { byId: guardianById } = useGuardianDirectory();
+  const childGuardians = childGuardianLinks
+    .map((link) => guardianById.get(link.guardianId))
+    .filter((guardian): guardian is NonNullable<typeof guardian> => guardian != null);
   const [values, setValues] = useState<ChangeBillingTermsFormValues>(
     emptyChangeBillingTermsFormValues,
   );
@@ -149,7 +159,7 @@ export function BillingTermsSheet({
           )}
 
           <BillingTermsFields
-            childId={childId}
+            guardians={childGuardians}
             values={values}
             onChange={(partial) => setValues((prev) => ({ ...prev, ...partial }))}
             fieldErrors={fieldErrors}

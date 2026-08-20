@@ -6,6 +6,8 @@ export interface Guardian {
   lastName: string;
   phone: string | null;
   email: string | null;
+  // Easy Enrollment (Product Gap H). Nullable.
+  address: string | null;
   userId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -24,6 +26,7 @@ export interface CreateGuardianRequest {
   lastName: string;
   phone?: string;
   email?: string;
+  address?: string;
 }
 
 export type UpdateGuardianRequest = Partial<CreateGuardianRequest>;

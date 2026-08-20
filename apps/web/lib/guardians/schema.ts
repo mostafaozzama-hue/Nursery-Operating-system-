@@ -7,6 +7,8 @@ export const guardianFormSchema = z
     lastName: z.string().trim().min(1, 'Last name is required'),
     phone: z.string().trim(),
     email: z.string().trim().refine(isBlankOrValidEmail, 'Enter a valid email address'),
+    // Easy Enrollment (Product Gap H). Nullable.
+    address: z.string().trim(),
   })
   .refine((values) => values.phone !== '' || values.email !== '', {
     message: 'Provide at least a phone number or an email address',
@@ -20,6 +22,7 @@ export const emptyGuardianFormValues: GuardianFormValues = {
   lastName: '',
   phone: '',
   email: '',
+  address: '',
 };
 
 export function toCreateGuardianRequest(values: GuardianFormValues): CreateGuardianRequest {
@@ -28,6 +31,7 @@ export function toCreateGuardianRequest(values: GuardianFormValues): CreateGuard
     lastName: values.lastName.trim(),
     phone: values.phone.trim() || undefined,
     email: values.email.trim() || undefined,
+    address: values.address.trim() || undefined,
   };
 }
 

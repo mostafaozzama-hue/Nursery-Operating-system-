@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { DataTable, type DataTableColumn } from '@/components/common/data-table';
+import { EmptyState } from '@/components/common/empty-state';
 import { PaginationControls } from '@/components/common/pagination-controls';
+import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { isApiError } from '@/lib/api/errors';
@@ -35,13 +37,18 @@ export function ChildrenList() {
   const columns: DataTableColumn<Child>[] = [
     {
       header: 'Name',
+      sortKey: 'firstName',
       cell: (child) => (
         <Link href={`/dashboard/children/${child.id}`} className="hover:underline">
           {fullName(child)}
         </Link>
       ),
     },
-    { header: 'Date of birth', cell: (child) => formatDateOfBirth(child.dateOfBirth) },
+    {
+      header: 'Date of birth',
+      sortKey: 'dateOfBirth',
+      cell: (child) => formatDateOfBirth(child.dateOfBirth),
+    },
     { header: 'Gender', cell: (child) => child.gender ?? '—' },
     ...(canManage
       ? [
@@ -65,18 +72,20 @@ export function ChildrenList() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <Input
-          placeholder="Search by name…"
-          defaultValue={query.search}
-          onChange={(event) => setQuery({ search: event.target.value })}
-          className="max-w-xs"
-        />
+        <PageTitle>Children · {total}</PageTitle>
         {canManage && (
           <Button asChild>
-            <Link href="/dashboard/children/new">Add Child</Link>
+            <Link href="/dashboard/children/enroll">Enroll Child</Link>
           </Button>
         )}
       </div>
+
+      <Input
+        placeholder="Search by name…"
+        defaultValue={query.search}
+        onChange={(event) => setQuery({ search: event.target.value })}
+        className="max-w-xs"
+      />
 
       {error ? (
         <div className="flex flex-col gap-2">
@@ -87,13 +96,25 @@ export function ChildrenList() {
             Retry
           </Button>
         </div>
+      ) : !isLoading && data.length === 0 ? (
+        <EmptyState
+          message={query.search ? 'No results match your search.' : 'No children yet.'}
+          action={canManage ? { label: 'Enroll Child', href: '/dashboard/children/enroll' } : undefined}
+        />
       ) : (
         <DataTable
           columns={columns}
           rows={data}
           rowKey={(child) => child.id}
           isLoading={isLoading}
-          emptyMessage={query.search ? 'No results match your search.' : 'No children found.'}
+          sortBy={query.sortBy}
+          sortOrder={query.sortOrder}
+          onSortChange={(field) =>
+            setQuery({
+              sortBy: field as typeof query.sortBy,
+              sortOrder: query.sortBy === field && query.sortOrder === 'asc' ? 'desc' : 'asc',
+            })
+          }
         />
       )}
 

@@ -3,6 +3,7 @@ export * from './common/errors';
 export * from './auth/types';
 export * from './classrooms/types';
 export * from './children/types';
+export * from './admissions/types';
 export * from './guardians/types';
 export * from './child-guardians/types';
 export * from './enrollments/types';

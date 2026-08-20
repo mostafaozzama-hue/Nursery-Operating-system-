@@ -1,3 +1,4 @@
+import { admissions } from './endpoints/admissions';
 import { attendance } from './endpoints/attendance';
 import { auth } from './endpoints/auth';
 import { billingRuns } from './endpoints/billing-runs';
@@ -32,6 +33,7 @@ export const api = {
   guardians,
   childGuardians,
   enrollments,
+  admissions,
   staff,
   memberships,
   payroll,

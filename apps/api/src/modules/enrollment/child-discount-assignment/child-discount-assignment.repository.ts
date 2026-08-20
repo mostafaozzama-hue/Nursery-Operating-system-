@@ -40,49 +40,91 @@ export class ChildDiscountAssignmentRepository {
    * layer only.
    */
   assign(tenantId: string, childId: string, data: AssignData, createdBy: string) {
-    return withTenantContext(this.prisma, tenantId, async (tx) => {
-      await findOrThrow('Child', childId, () =>
-        tx.child.findFirst({ where: { id: childId, tenantId, deletedAt: null } }),
-      );
+    return withTenantContext(this.prisma, tenantId, (tx) => this.assignWithinTx(tx, tenantId, childId, data, createdBy));
+  }
 
-      const discount = await findOrThrow('Discount', data.discountId, () =>
-        tx.discount.findFirst({ where: { id: data.discountId, tenantId, deletedAt: null } }),
-      );
-      if (!discount.isActive) {
-        throw new ChildDiscountAssignmentConflictError('This Discount is inactive and cannot be newly assigned');
+  /**
+   * tx-accepting primitive (Easy Enrollment, Product Gap H phase 2) - same
+   * pattern as ChildRepository.createWithinTx (see its doc comment).
+   * assign() above is a thin wrapper opening its own transaction;
+   * AdmissionRepository composes this directly inside its own single
+   * transaction so a discount attached during enrollment commits or rolls
+   * back with everything else, while every existing check (inactive
+   * Discount, duplicate assignment, exclusive-conflict) stays unchanged.
+   */
+  async assignWithinTx(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    childId: string,
+    data: AssignData,
+    createdBy: string,
+  ) {
+    await findOrThrow('Child', childId, () =>
+      tx.child.findFirst({ where: { id: childId, tenantId, deletedAt: null } }),
+    );
+
+    const discount = await findOrThrow('Discount', data.discountId, () =>
+      tx.discount.findFirst({ where: { id: data.discountId, tenantId, deletedAt: null } }),
+    );
+    if (!discount.isActive) {
+      throw new ChildDiscountAssignmentConflictError('This Discount is inactive and cannot be newly assigned');
+    }
+
+    const newEffectiveFrom = new Date(data.effectiveFrom.slice(0, 10));
+
+    // Not a frozen-document rule - basic date-range sanity, inferred by
+    // analogy to every other effectiveFrom/effectiveTo pair in this
+    // codebase, applied here since assign() (unlike ChildFeeAssignment's)
+    // can receive an effectiveTo at creation time.
+    if (data.effectiveTo !== undefined) {
+      const newEffectiveTo = new Date(data.effectiveTo.slice(0, 10));
+      if (newEffectiveTo <= newEffectiveFrom) {
+        throw new ChildDiscountAssignmentConflictError('effectiveTo must be after effectiveFrom');
       }
+    }
 
-      const newEffectiveFrom = new Date(data.effectiveFrom.slice(0, 10));
+    const existingOpen = await tx.childDiscountAssignment.findFirst({
+      where: { tenantId, childId, discountId: data.discountId, effectiveTo: null, deletedAt: null },
+    });
+    if (existingOpen) {
+      throw new ChildDiscountAssignmentConflictError('This Discount is already assigned to this Child');
+    }
 
-      // Not a frozen-document rule - basic date-range sanity, inferred by
-      // analogy to every other effectiveFrom/effectiveTo pair in this
-      // codebase, applied here since assign() (unlike ChildFeeAssignment's)
-      // can receive an effectiveTo at creation time.
-      if (data.effectiveTo !== undefined) {
-        const newEffectiveTo = new Date(data.effectiveTo.slice(0, 10));
-        if (newEffectiveTo <= newEffectiveFrom) {
-          throw new ChildDiscountAssignmentConflictError('effectiveTo must be after effectiveFrom');
-        }
-      }
-
-      const existingOpen = await tx.childDiscountAssignment.findFirst({
-        where: { tenantId, childId, discountId: data.discountId, effectiveTo: null, deletedAt: null },
-      });
-      if (existingOpen) {
-        throw new ChildDiscountAssignmentConflictError('This Discount is already assigned to this Child');
-      }
-
-      return tx.childDiscountAssignment.create({
-        data: {
+    // Discount bug fix (Easy Enrollment, Product Gap H phase 2): the
+    // domain model's own stacking rule ("stackable Discounts combine;
+    // among exclusive ones, only the best one wins" - PricingEngineService)
+    // was already correctly billed, but never enforced here at assignment
+    // time - a child could accumulate multiple exclusive assignments with
+    // no visibility into which one actually had any billing effect. At
+    // most one OPEN exclusive (non-stackable) assignment per child;
+    // stackable Discounts are unaffected and keep combining freely.
+    if (!discount.stackable) {
+      const existingExclusive = await tx.childDiscountAssignment.findFirst({
+        where: {
           tenantId,
           childId,
-          discountId: data.discountId,
-          snapshotAmount: discount.amount,
-          effectiveFrom: newEffectiveFrom,
-          effectiveTo: data.effectiveTo ? new Date(data.effectiveTo.slice(0, 10)) : undefined,
-          createdBy,
+          effectiveTo: null,
+          deletedAt: null,
+          discount: { stackable: false },
         },
       });
+      if (existingExclusive) {
+        throw new ChildDiscountAssignmentConflictError(
+          'An exclusive discount is already active for this child - remove it first, or choose a stackable discount',
+        );
+      }
+    }
+
+    return tx.childDiscountAssignment.create({
+      data: {
+        tenantId,
+        childId,
+        discountId: data.discountId,
+        snapshotAmount: discount.amount,
+        effectiveFrom: newEffectiveFrom,
+        effectiveTo: data.effectiveTo ? new Date(data.effectiveTo.slice(0, 10)) : undefined,
+        createdBy,
+      },
     });
   }
 
@@ -113,6 +155,29 @@ export class ChildDiscountAssignmentRepository {
       // ChildFeeAssignmentService.unassign, not a frozen-document
       // requirement - neither document states how this case should behave
       // for either entity.
+      if (count === 0) {
+        throw new ChildDiscountAssignmentConflictError('This Discount is not currently assigned to this Child');
+      }
+    });
+  }
+
+  /**
+   * Discount bug fix (Easy Enrollment, Product Gap H phase 2): real removal
+   * of a currently-open assignment, using this codebase's existing
+   * universal soft-delete convention (ADR-0013) - the same deletedAt/
+   * deletedBy columns every other entity already has, just never exposed
+   * for this one. Distinct from expire(): expire schedules a *future*
+   * close and requires effectiveTo strictly after effectiveFrom (so it can
+   * never undo a same-day mistake); this removes the assignment outright,
+   * with no date involved, for exactly that case - "I just added the wrong
+   * discount, take it off."
+   */
+  softDelete(tenantId: string, childId: string, discountId: string, deletedBy: string) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      const { count } = await tx.childDiscountAssignment.updateMany({
+        where: { tenantId, childId, discountId, effectiveTo: null, deletedAt: null },
+        data: { deletedAt: new Date(), deletedBy },
+      });
       if (count === 0) {
         throw new ChildDiscountAssignmentConflictError('This Discount is not currently assigned to this Child');
       }

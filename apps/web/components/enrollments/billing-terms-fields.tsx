@@ -1,5 +1,6 @@
 'use client';
 
+import type { Guardian } from '@nursery-os/contracts';
 import { DEPOSIT_REFUND_POLICIES } from '@nursery-os/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,29 +13,30 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { isApiError } from '@/lib/api/errors';
-import { useChildGuardians } from '@/lib/child-guardians/queries';
 import { DEPOSIT_REFUND_POLICY_LABEL } from '@/lib/enrollment-billing-terms/mapper';
 import type { OpenBillingTermsFormValues } from '@/lib/enrollment-billing-terms/schema';
 import { fullName } from '@/lib/guardians/mapper';
-import { useGuardianDirectory } from '@/lib/guardians/queries';
 import { usePlanDirectory } from '@/lib/plans/queries';
 
 /**
- * The fields shared by the Enroll form's billing-terms disclosure and the
- * BillingTermsSheet - everything except effectiveFrom, which only the
- * Sheet's change-existing flow needs. Guardian picker is scoped to this
- * specific child's own linked guardians (useChildGuardians), not a
- * tenant-wide search - you can only bill someone actually linked to the
- * child. Plan picker is a plain Select (usePlanDirectory, active-only),
- * per the approved "no new picker pattern" decision.
+ * The fields shared by the Enroll form's billing-terms disclosure, the
+ * BillingTermsSheet, and the Easy Enrollment wizard's Enrollment step -
+ * everything except effectiveFrom, which only the Sheet's change-existing
+ * flow needs. `guardians` is caller-supplied rather than fetched here (Easy
+ * Enrollment, Product Gap H) - the wizard's child/guardians don't exist yet
+ * mid-flow, so its Enrollment step passes the in-memory guardians instead of
+ * EnrollForm/BillingTermsSheet's useChildGuardians(childId) fetch. Either
+ * way you can only bill someone actually linked to the child. Plan picker is
+ * a plain Select (usePlanDirectory, active-only), per the approved "no new
+ * picker pattern" decision.
  */
 export function BillingTermsFields({
-  childId,
+  guardians,
   values,
   onChange,
   fieldErrors,
 }: {
-  childId: string;
+  guardians: Guardian[];
   values: OpenBillingTermsFormValues;
   onChange: (partial: Partial<OpenBillingTermsFormValues>) => void;
   fieldErrors: Partial<Record<keyof OpenBillingTermsFormValues, string>>;
@@ -45,12 +47,6 @@ export function BillingTermsFields({
     error: plansError,
     refetch: refetchPlans,
   } = usePlanDirectory();
-  const { data: childGuardianLinks } = useChildGuardians(childId);
-  const { byId: guardianById, isLoading: guardiansLoading } = useGuardianDirectory();
-
-  const childGuardians = childGuardianLinks
-    .map((link) => guardianById.get(link.guardianId))
-    .filter((guardian): guardian is NonNullable<typeof guardian> => guardian != null);
 
   return (
     <>
@@ -92,10 +88,10 @@ export function BillingTermsFields({
           onValueChange={(value) => onChange({ billingGuardianId: value })}
         >
           <SelectTrigger>
-            <SelectValue placeholder={guardiansLoading ? 'Loading…' : 'Select a guardian'} />
+            <SelectValue placeholder="Select a guardian" />
           </SelectTrigger>
           <SelectContent>
-            {childGuardians.map((guardian) => (
+            {guardians.map((guardian) => (
               <SelectItem key={guardian.id} value={guardian.id}>
                 {fullName(guardian)}
               </SelectItem>

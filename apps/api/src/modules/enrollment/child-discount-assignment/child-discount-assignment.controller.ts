@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiPaginatedResponse } from '../../../common/pagination/api-paginated-response.decorator';
 import { Roles } from '../../identity/decorators/roles.decorator';
@@ -63,5 +75,23 @@ export class ChildDiscountAssignmentController {
   @ApiPaginatedResponse(ChildDiscountAssignmentResponseDto)
   findForChild(@Param('childId', ParseUUIDPipe) childId: string, @Query() query: ChildDiscountAssignmentQueryDto) {
     return this.childDiscountAssignmentService.findForChild(childId, query);
+  }
+
+  /**
+   * Discount bug fix (Easy Enrollment, Product Gap H phase 2) - real
+   * removal, using this codebase's existing universal soft-delete
+   * convention (ADR-0013), same as every other entity's DELETE route.
+   * Distinct from expire (a scheduled future close) - see
+   * ChildDiscountAssignmentRepository.softDelete's doc comment.
+   */
+  @Delete(':discountId')
+  @Roles('OWNER', 'ADMIN')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Remove a Discount assignment from a Child (soft-delete, not a scheduled expiry)" })
+  @ApiParam({ name: 'childId', format: 'uuid' })
+  @ApiParam({ name: 'discountId', format: 'uuid' })
+  @ApiResponse({ status: 204 })
+  remove(@Param('childId', ParseUUIDPipe) childId: string, @Param('discountId', ParseUUIDPipe) discountId: string) {
+    return this.childDiscountAssignmentService.remove(childId, discountId);
   }
 }

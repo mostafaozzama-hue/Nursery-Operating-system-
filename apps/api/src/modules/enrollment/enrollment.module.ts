@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdmissionModule } from './admission/admission.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { BillingRunModule } from './billing-run/billing-run.module';
 import { ChildModule } from './child/child.module';
@@ -31,6 +32,7 @@ import { WaiverModule } from './waiver/waiver.module';
 
 @Module({
   imports: [
+    AdmissionModule,
     ClassroomModule,
     ChildModule,
     ChildDiscountAssignmentModule,
