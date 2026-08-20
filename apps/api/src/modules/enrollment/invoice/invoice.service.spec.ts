@@ -32,6 +32,7 @@ describe('InvoiceService', () => {
       findByBillingRunAndChild: jest.fn(),
       findAllForBillingRun: jest.fn(),
       recomputePaymentState: jest.fn(),
+      getSummary: jest.fn(),
     } as unknown as jest.Mocked<InvoiceRepository>;
 
     currentTenant = { getTenantId: jest.fn().mockReturnValue('tenant-1') } as unknown as jest.Mocked<CurrentTenantProvider>;
@@ -319,6 +320,19 @@ describe('InvoiceService', () => {
       repository.findAllForBillingRun.mockResolvedValue([]);
       await service.findAllForBillingRun('tenant-1', 'run-1');
       expect(repository.findAllForBillingRun).toHaveBeenCalledWith('tenant-1', 'run-1', undefined);
+    });
+  });
+
+  describe('getSummary', () => {
+    it('passes the resolved tenant and query through to the repository', async () => {
+      const query = { from: '2026-08-01', to: '2026-09-01' };
+      const summary = { outstandingAmount: '100', overdueAmount: '0', overdueInvoiceCount: 0, invoicedAmount: '100' };
+      repository.getSummary.mockResolvedValue(summary as never);
+
+      const result = await service.getSummary(query);
+
+      expect(repository.getSummary).toHaveBeenCalledWith('tenant-1', query);
+      expect(result).toBe(summary);
     });
   });
 });

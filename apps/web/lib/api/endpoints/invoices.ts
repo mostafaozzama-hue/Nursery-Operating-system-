@@ -5,6 +5,8 @@ import type {
   InvoiceLineItem,
   InvoicePaymentAllocation,
   InvoiceQuery,
+  InvoiceSummary,
+  InvoiceSummaryQuery,
   IssueInvoiceRequest,
   LineItemQuery,
   Paginated,
@@ -33,4 +35,6 @@ export const invoices = {
   listPayments: (invoiceId: string, query?: PaymentQuery) =>
     get<Paginated<InvoicePaymentAllocation>>(`/invoices/${invoiceId}/payments`, query),
   void: (invoiceId: string) => post<Invoice>(`/invoices/${invoiceId}/void`),
+  /** Owner Dashboard financial snapshot - outstanding/overdue balances (as-of-now) plus invoiced amount for an optional period. */
+  getSummary: (query?: InvoiceSummaryQuery) => get<InvoiceSummary>('/invoices/summary', query),
 };

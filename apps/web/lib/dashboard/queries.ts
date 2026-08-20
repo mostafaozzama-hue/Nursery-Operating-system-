@@ -34,6 +34,29 @@ export interface DashboardOverview {
   noPlansConfigured: boolean;
   recentActivity: RecentActivityItem[];
   birthdaysThisMonth: Child[];
+  /**
+   * Owner Dashboard financial snapshot (extends Dashboard v1, does not
+   * replace it - see design-system.md §12 and the approved
+   * "Owner Dashboard - Financial Snapshot" phase). canManage-only, same
+   * gating as the Payroll-derived attention items above - all four amounts
+   * are OWNER/ADMIN-only on the backend. outstandingAmount/overdueAmount
+   * are as-of-now snapshots; collectedAmountThisMonth/
+   * invoicedAmountThisMonth are scoped to the current tenant-local-ish
+   * calendar month (browser-local, same approximation as todayLocalDate
+   * elsewhere in this file). null for a non-canManage caller.
+   */
+  outstandingAmount: string | null;
+  overdueAmount: string | null;
+  collectedAmountThisMonth: string | null;
+  invoicedAmountThisMonth: string | null;
+}
+
+/** "This month" as [from, to) - browser-local calendar month, same approximation todayLocalDate already uses elsewhere in this file (no tenant-timezone endpoint exists on the frontend). */
+function thisMonthRange(): { from: string; to: string } {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return { from: from.toLocaleDateString('en-CA'), to: to.toLocaleDateString('en-CA') };
 }
 
 export interface DashboardOverviewResult {
@@ -70,6 +93,7 @@ export function useDashboardOverview(canManage: boolean): DashboardOverviewResul
     setError(null);
 
     const today = todayLocalDate();
+    const { from: monthStart, to: monthEnd } = thisMonthRange();
 
     Promise.all([
       api.enrollments.list({ status: 'ACTIVE', open: true, pageSize: 100 }),
@@ -83,6 +107,12 @@ export function useDashboardOverview(canManage: boolean): DashboardOverviewResul
       api.children.list({ pageSize: 100, sortBy: 'createdAt', sortOrder: 'desc' }),
       api.guardians.list({ pageSize: 5, sortBy: 'createdAt', sortOrder: 'desc' }),
       canManage ? api.payroll.list({ pageSize: 100 }) : Promise.resolve(null),
+      // Owner Dashboard financial snapshot - OWNER/ADMIN-only on the
+      // backend (@Roles('OWNER','ADMIN') on both summary endpoints),
+      // matching the canManage gating already established for payroll
+      // above.
+      canManage ? api.invoices.getSummary({ from: monthStart, to: monthEnd }) : Promise.resolve(null),
+      canManage ? api.payments.getSummary({ from: monthStart, to: monthEnd }) : Promise.resolve(null),
     ])
       .then(
         ([
@@ -97,6 +127,8 @@ export function useDashboardOverview(canManage: boolean): DashboardOverviewResul
           childList,
           guardianList,
           payrollList,
+          invoiceSummary,
+          paymentSummary,
         ]) => {
           if (cancelled) return;
 
@@ -191,6 +223,10 @@ export function useDashboardOverview(canManage: boolean): DashboardOverviewResul
             noPlansConfigured: activePlans.meta.total === 0,
             recentActivity,
             birthdaysThisMonth,
+            outstandingAmount: invoiceSummary?.outstandingAmount ?? null,
+            overdueAmount: invoiceSummary?.overdueAmount ?? null,
+            collectedAmountThisMonth: paymentSummary?.collectedAmount ?? null,
+            invoicedAmountThisMonth: invoiceSummary?.invoicedAmount ?? null,
           });
         },
       )

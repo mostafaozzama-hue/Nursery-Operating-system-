@@ -50,6 +50,26 @@ export class PaymentRepository {
     });
   }
 
+  /** Owner Dashboard financial snapshot - tenant-wide, unlike every other method here (findForGuardian/createComposable are guardian-scoped). paidAt basis, matching PaymentSummaryQueryDto's own doc comment. */
+  getSummary(tenantId: string, options: { from?: string; to?: string }) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      const where: Prisma.PaymentWhereInput = {
+        tenantId,
+        deletedAt: null,
+        ...(options.from || options.to
+          ? {
+              paidAt: {
+                ...(options.from ? { gte: new Date(options.from) } : {}),
+                ...(options.to ? { lt: new Date(options.to) } : {}),
+              },
+            }
+          : {}),
+      };
+      const agg = await tx.payment.aggregate({ where, _sum: { amount: true } });
+      return { collectedAmount: (agg._sum.amount ?? new Prisma.Decimal(0)).toString() };
+    });
+  }
+
   findForGuardian(tenantId: string, guardianId: string, options: FindManyOptions) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       await findOrThrow('Guardian', guardianId, () =>

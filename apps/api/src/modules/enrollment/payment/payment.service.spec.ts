@@ -20,6 +20,7 @@ describe('PaymentService', () => {
       runInTransaction: jest.fn().mockImplementation((tenantId, fn) => fn('tx' as never)),
       createComposable: jest.fn(),
       findForGuardian: jest.fn(),
+      getSummary: jest.fn(),
     } as unknown as jest.Mocked<PaymentRepository>;
 
     paymentAllocation = {
@@ -87,6 +88,18 @@ describe('PaymentService', () => {
       await expect(
         service.findForGuardian('guardian-1', { page: 1, pageSize: 20, sortBy: 'paidAt', sortOrder: 'desc' } as never),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getSummary', () => {
+    it('passes the resolved tenant and query through to the repository', async () => {
+      const query = { from: '2026-08-01', to: '2026-09-01' };
+      repository.getSummary.mockResolvedValue({ collectedAmount: '500' } as never);
+
+      const result = await service.getSummary(query);
+
+      expect(repository.getSummary).toHaveBeenCalledWith('tenant-1', query);
+      expect(result).toEqual({ collectedAmount: '500' });
     });
   });
 });

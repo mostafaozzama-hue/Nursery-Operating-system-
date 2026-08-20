@@ -8,6 +8,7 @@ import { LineItemDraft } from '../pricing-engine/line-item-draft.type';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateLineItemDto } from './dto/create-line-item.dto';
 import { InvoiceQueryDto } from './dto/invoice-query.dto';
+import { InvoiceSummaryQueryDto } from './dto/invoice-summary-query.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { LineItemQueryDto } from './dto/line-item-query.dto';
 import { PaymentQueryDto } from './dto/payment-query.dto';
@@ -39,6 +40,12 @@ export class InvoiceService {
   findOne(id: string) {
     const tenantId = this.currentTenant.getTenantId();
     return this.repository.findOneOrThrow(tenantId, id).catch(translateNotFound);
+  }
+
+  /** Owner Dashboard financial snapshot - see InvoiceRepository.getSummary. */
+  getSummary(query: InvoiceSummaryQueryDto) {
+    const tenantId = this.currentTenant.getTenantId();
+    return this.repository.getSummary(tenantId, query);
   }
 
   /** Composable (optional tx) - WaiverService.applyRetroactively's entry read (status + billingRun/period in one query). */

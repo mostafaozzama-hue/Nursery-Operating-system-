@@ -1,6 +1,8 @@
+import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle } from '@/components/common/card';
 import { EmptyState } from '@/components/common/empty-state';
+import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { staffFullName } from '@/lib/staff/mapper';
 import type { DashboardOverview } from '@/lib/dashboard/queries';
@@ -31,10 +33,15 @@ export function AttentionList({ overview }: { overview: DashboardOverview }) {
   const items: AttentionItem[] = [];
 
   if (overview.overdueInvoicesCount > 0) {
+    // overdueAmount comes from the canManage-only Financial Snapshot
+    // summary (GET /invoices/summary) - falls back to the count-only
+    // message for a non-canManage (STAFF) caller, who never fetches that
+    // endpoint, rather than showing a misleading "0" amount.
+    const amountSuffix = overview.overdueAmount !== null ? ` - ${formatMoney(overview.overdueAmount)}` : '';
     items.push({
       key: 'overdue-invoices',
       severity: 'destructive',
-      message: `${overview.overdueInvoicesCount} overdue ${overview.overdueInvoicesCount === 1 ? 'invoice' : 'invoices'}`,
+      message: `${overview.overdueInvoicesCount} overdue ${overview.overdueInvoicesCount === 1 ? 'invoice' : 'invoices'}${amountSuffix}`,
       href: '/dashboard/invoices?status=OVERDUE',
     });
   }
@@ -78,7 +85,10 @@ export function AttentionList({ overview }: { overview: DashboardOverview }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Needs attention</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Bell className="size-4 text-primary" aria-hidden="true" />
+          Needs attention
+        </CardTitle>
       </CardHeader>
       {items.length === 0 ? (
         <EmptyState message="Nothing needs attention right now." />

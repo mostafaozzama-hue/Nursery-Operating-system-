@@ -3,10 +3,11 @@ import { PaymentAllocationModule } from '../payment-allocation/payment-allocatio
 import { PaymentController } from './payment.controller';
 import { PaymentRepository } from './payment.repository';
 import { PaymentService } from './payment.service';
+import { PaymentsSummaryController } from './payments-summary.controller';
 
 @Module({
   imports: [PaymentAllocationModule],
-  controllers: [PaymentController],
+  controllers: [PaymentController, PaymentsSummaryController],
   providers: [PaymentService, PaymentRepository],
   exports: [PaymentService],
 })

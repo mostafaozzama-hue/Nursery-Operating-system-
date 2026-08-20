@@ -7,6 +7,7 @@ import { CurrentTenantProvider } from '../../tenancy/current-tenant.provider';
 import { PaymentAllocationError } from '../payment-allocation/payment-allocation.error';
 import { PaymentAllocationService } from '../payment-allocation/payment-allocation.service';
 import { PaymentQueryDto } from './dto/payment-query.dto';
+import { PaymentSummaryQueryDto } from './dto/payment-summary-query.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { PaymentRepository } from './payment.repository';
 
@@ -45,6 +46,12 @@ export class PaymentService {
       .findForGuardian(tenantId, guardianId, query)
       .catch(translateNotFound);
     return buildPaginatedResult(items, total, query);
+  }
+
+  /** Owner Dashboard financial snapshot - see PaymentRepository.getSummary. */
+  getSummary(query: PaymentSummaryQueryDto) {
+    const tenantId = this.currentTenant.getTenantId();
+    return this.repository.getSummary(tenantId, query);
   }
 
   private translateError(error: unknown): never {

@@ -26,3 +26,13 @@ export interface RecordPaymentRequest {
   paymentMethod: PaymentMethod;
   paidAt?: string;
 }
+
+/** Owner Dashboard financial snapshot. Payment.paidAt basis - cash-collected date. */
+export interface PaymentSummaryQuery {
+  from?: string;
+  to?: string;
+}
+
+export interface PaymentSummary {
+  collectedAmount: string;
+}

@@ -92,3 +92,16 @@ export type UpdateLineItemRequest = Partial<CreateLineItemRequest>;
 export interface IssueInvoiceRequest {
   dueDate?: string;
 }
+
+/** Owner Dashboard financial snapshot. from/to only bound invoicedAmount - outstandingAmount/overdueAmount are always as-of-now snapshots. */
+export interface InvoiceSummaryQuery {
+  from?: string;
+  to?: string;
+}
+
+export interface InvoiceSummary {
+  outstandingAmount: string;
+  overdueAmount: string;
+  overdueInvoiceCount: number;
+  invoicedAmount: string;
+}

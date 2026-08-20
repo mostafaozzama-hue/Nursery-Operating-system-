@@ -1,4 +1,11 @@
-import type { Paginated, Payment, PaymentQuery, RecordPaymentRequest } from '@nursery-os/contracts';
+import type {
+  Paginated,
+  Payment,
+  PaymentQuery,
+  PaymentSummary,
+  PaymentSummaryQuery,
+  RecordPaymentRequest,
+} from '@nursery-os/contracts';
 import { get, post } from '../client';
 
 /**
@@ -15,4 +22,6 @@ export const payments = {
     post<Payment>(`/guardians/${guardianId}/payments`, body),
   list: (guardianId: string, query?: PaymentQuery) =>
     get<Paginated<Payment>>(`/guardians/${guardianId}/payments`, query),
+  /** Owner Dashboard financial snapshot - tenant-wide, unlike record/list above (both guardian-scoped). */
+  getSummary: (query?: PaymentSummaryQuery) => get<PaymentSummary>('/payments/summary', query),
 };

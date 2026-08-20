@@ -26,6 +26,18 @@ describe('Invoice module (e2e)', () => {
   let membershipOwnerBId: string;
   const ownerBEmail = `invoice-owner-b-${Date.now()}@e2e.test`;
 
+  // Dedicated tenant for the Owner Dashboard financial-summary tests below -
+  // isolated from tenantA (which accumulates many DRAFT/ISSUED/VOID
+  // invoices across the rest of this file) so summary sums are exact and
+  // deterministic, not a moving target.
+  let tenantCId: string;
+  let ownerCId: string;
+  let staffCId: string;
+  let membershipOwnerCId: string;
+  let membershipStaffCId: string;
+  const ownerCEmail = `invoice-owner-c-${Date.now()}@e2e.test`;
+  const staffCEmail = `invoice-staff-c-${Date.now()}@e2e.test`;
+
   const createdChildIds: string[] = [];
   const createdGuardianIds: string[] = [];
 
@@ -46,16 +58,27 @@ describe('Invoice module (e2e)', () => {
     const ownerB = await createTestUser(ownerBEmail, password);
     ownerBId = ownerB.id;
     membershipOwnerBId = (await createTestMembership(ownerBId, tenantBId, 'OWNER')).id;
+
+    const tenantC = await createTestTenant(`E2E Invoice Tenant C ${Date.now()}`);
+    tenantCId = tenantC.id;
+    const ownerC = await createTestUser(ownerCEmail, password);
+    ownerCId = ownerC.id;
+    const staffC = await createTestUser(staffCEmail, password);
+    staffCId = staffC.id;
+    membershipOwnerCId = (await createTestMembership(ownerCId, tenantCId, 'OWNER')).id;
+    membershipStaffCId = (await createTestMembership(staffCId, tenantCId, 'STAFF')).id;
   });
 
   afterAll(async () => {
     // PaymentAllocation FKs to both Payment and Invoice - must go first, or
     // either delete below fails with a foreign-key constraint violation now
     // that payments are guardian-anchored and always create allocation rows.
-    await superuserPrisma.paymentAllocation.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
-    await superuserPrisma.payment.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
-    await superuserPrisma.invoiceLineItem.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
-    await superuserPrisma.invoice.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
+    const allTenantIds = [tenantAId, tenantBId, tenantCId];
+    await superuserPrisma.paymentAllocation.deleteMany({ where: { tenantId: { in: allTenantIds } } });
+    await superuserPrisma.creditNote.deleteMany({ where: { tenantId: { in: allTenantIds } } });
+    await superuserPrisma.payment.deleteMany({ where: { tenantId: { in: allTenantIds } } });
+    await superuserPrisma.invoiceLineItem.deleteMany({ where: { tenantId: { in: allTenantIds } } });
+    await superuserPrisma.invoice.deleteMany({ where: { tenantId: { in: allTenantIds } } });
     if (createdChildIds.length) {
       await superuserPrisma.child.deleteMany({ where: { id: { in: createdChildIds } } });
     }
@@ -63,10 +86,10 @@ describe('Invoice module (e2e)', () => {
       await superuserPrisma.guardian.deleteMany({ where: { id: { in: createdGuardianIds } } });
     }
     await cleanupTestData({
-      refreshTokenUserIds: [ownerAId, staffAId, ownerBId],
-      membershipIds: [membershipOwnerAId, membershipStaffAId, membershipOwnerBId],
-      userIds: [ownerAId, staffAId, ownerBId],
-      tenantIds: [tenantAId, tenantBId],
+      refreshTokenUserIds: [ownerAId, staffAId, ownerBId, ownerCId, staffCId],
+      membershipIds: [membershipOwnerAId, membershipStaffAId, membershipOwnerBId, membershipOwnerCId, membershipStaffCId],
+      userIds: [ownerAId, staffAId, ownerBId, ownerCId, staffCId],
+      tenantIds: [tenantAId, tenantBId, tenantCId],
     });
     await app.close();
   });
@@ -457,5 +480,110 @@ describe('Invoice module (e2e)', () => {
 
     const creditRes = await agent.get(`/guardians/${invoice.billedToGuardianId}/credit`);
     expect(creditRes.body.availableCredit).toBe('20');
+  });
+
+  describe('Owner Dashboard financial snapshot (GET /invoices/summary, GET /payments/summary)', () => {
+    it('forbids STAFF from reading either summary endpoint', async () => {
+      const staffAgent = await loginAs(staffCEmail);
+
+      const invoiceSummaryRes = await staffAgent.get('/invoices/summary');
+      expect(invoiceSummaryRes.status).toBe(403);
+
+      const paymentSummaryRes = await staffAgent.get('/payments/summary');
+      expect(paymentSummaryRes.status).toBe(403);
+    });
+
+    it('computes outstandingAmount/overdueAmount net of applied payments and credit notes, invoicedAmount for a period, and collectedAmount from payments', async () => {
+      const agent = await loginAs(ownerCEmail);
+
+      // Invoice A: $100, ISSUED, due in the future - fully outstanding, not overdue.
+      const invoiceA = await createDraftInvoice(agent, {
+        lineItems: [{ description: 'Tuition', quantity: 1, unitAmount: 100 }],
+      });
+      await agent.post(`/invoices/${invoiceA.id}/issue`).send({ dueDate: '2099-01-01' });
+
+      // Invoice B: $50, ISSUED, due in the past - outstanding AND overdue.
+      const invoiceB = await createDraftInvoice(agent, {
+        lineItems: [{ description: 'Tuition', quantity: 1, unitAmount: 50 }],
+      });
+      await agent.post(`/invoices/${invoiceB.id}/issue`).send({ dueDate: '2020-01-01' });
+
+      // Invoice C: $80, ISSUED then fully paid - PAID, excluded from outstanding entirely.
+      const invoiceC = await createDraftInvoice(agent, {
+        lineItems: [{ description: 'Tuition', quantity: 1, unitAmount: 80 }],
+      });
+      await agent.post(`/invoices/${invoiceC.id}/issue`).send({ dueDate: '2099-01-01' });
+      const paymentCRes = await agent
+        .post(`/guardians/${invoiceC.billedToGuardianId}/payments`)
+        .send({ amount: 80, paymentMethod: 'CASH' });
+      expect(paymentCRes.status).toBe(201);
+
+      // Invoice D: $60, ISSUED, partially paid $20 - PARTIALLY_PAID, $40 still outstanding.
+      const invoiceD = await createDraftInvoice(agent, {
+        lineItems: [{ description: 'Tuition', quantity: 1, unitAmount: 60 }],
+      });
+      await agent.post(`/invoices/${invoiceD.id}/issue`).send({ dueDate: '2099-01-01' });
+      const paymentDRes = await agent
+        .post(`/guardians/${invoiceD.billedToGuardianId}/payments`)
+        .send({ amount: 20, paymentMethod: 'CASH' });
+      expect(paymentDRes.status).toBe(201);
+
+      // A $10 CreditNote directly against Invoice A - reduces its net balance
+      // to $90, exactly like an applied PaymentAllocation would. Created
+      // directly against the DB since the only production path
+      // (WaiverService.applyRetroactively) isn't exercised in isolation
+      // here - this targets amountDue's own subtraction, not that flow.
+      await superuserPrisma.creditNote.create({
+        data: {
+          tenantId: tenantCId,
+          invoiceId: invoiceA.id,
+          guardianId: invoiceA.billedToGuardianId,
+          amount: '10',
+          reasonCode: 'TEST_ADJUSTMENT',
+          creditNoteNumber: `CN-TEST-${Date.now()}`,
+          createdBy: ownerCId,
+        },
+      });
+
+      // outstanding = A(100-10) + B(50) + D(60-20) = 90 + 50 + 40 = 180
+      // overdue = B only = 50, count 1
+      const summaryRes = await agent.get('/invoices/summary');
+      expect(summaryRes.status).toBe(200);
+      expect(summaryRes.body.outstandingAmount).toBe('180');
+      expect(summaryRes.body.overdueAmount).toBe('50');
+      expect(summaryRes.body.overdueInvoiceCount).toBe(1);
+
+      // invoicedAmount (no range) = every ISSUED/PARTIALLY_PAID/PAID invoice's totalAmount = 100+50+80+60 = 290
+      expect(summaryRes.body.invoicedAmount).toBe('290');
+
+      // A range that excludes "now" entirely (far future) sees none of them.
+      const futureRangeRes = await agent.get('/invoices/summary?from=2099-01-01&to=2099-02-01');
+      expect(futureRangeRes.body.invoicedAmount).toBe('0');
+
+      // A wide range spanning "now" sees all four again.
+      const wideRangeRes = await agent.get('/invoices/summary?from=1900-01-01&to=2099-01-01');
+      expect(wideRangeRes.body.invoicedAmount).toBe('290');
+
+      // collectedAmount = payment against C ($80) + payment against D ($20) = 100
+      const paymentSummaryRes = await agent.get('/payments/summary?from=1900-01-01&to=2099-01-01');
+      expect(paymentSummaryRes.status).toBe(200);
+      expect(paymentSummaryRes.body.collectedAmount).toBe('100');
+
+      const futurePaymentSummaryRes = await agent.get('/payments/summary?from=2099-01-01&to=2099-02-01');
+      expect(futurePaymentSummaryRes.body.collectedAmount).toBe('0');
+    });
+
+    it("excludes tenant A's invoices/payments from tenant C's summary (RLS isolation)", async () => {
+      // tenantA has accumulated many invoices/payments across the rest of
+      // this file by this point - if RLS or the tenantId filter in
+      // getSummary/sumBalance were ever dropped, tenantC's numbers would
+      // include them and this would fail.
+      const agentC = await loginAs(ownerCEmail);
+      const summaryRes = await agentC.get('/invoices/summary?from=1900-01-01&to=2099-01-01');
+      expect(summaryRes.status).toBe(200);
+      // Exactly the 4 invoices created in the previous test - unaffected by
+      // whatever tenantA's suite accumulated.
+      expect(summaryRes.body.invoicedAmount).toBe('290');
+    });
   });
 });

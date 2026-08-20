@@ -208,6 +208,93 @@ export class InvoiceRepository {
     });
   }
 
+  /**
+   * Owner Dashboard financial snapshot (read-only, no new schema).
+   * outstandingAmount/overdueAmount are always as-of-now - see the DTO's
+   * own doc comment for why from/to only bound invoicedAmount. amountDue
+   * per invoice = totalAmount - Σ PaymentAllocation.amountApplied -
+   * Σ CreditNote.amount, mirroring the exact aggregate recomputePaymentState
+   * already uses to decide PAID/PARTIALLY_PAID (CreditNote added here
+   * since that method predates CreditNote's rollout). CreditNote.status is
+   * a plain, ungoverned String defaulting to 'OPEN' - nothing in this
+   * codebase ever writes or reads a different value (verified: only
+   * CreditNoteRepository.createComposable ever creates a row, and never
+   * sets status explicitly) - so every non-deleted CreditNote currently in
+   * the system is unambiguously still open, and status is intentionally
+   * not filtered on below.
+   */
+  getSummary(tenantId: string, options: { from?: string; to?: string }) {
+    return withTenantContext(this.prisma, tenantId, async (tx) => {
+      const tenant = await findOrThrow('Tenant', tenantId, () =>
+        tx.tenant.findFirst({ where: { id: tenantId, deletedAt: null } }),
+      );
+      const today = getTenantLocalDate(tenant.timezone);
+
+      const [outstanding, overdue] = await Promise.all([
+        this.sumBalance(tx, tenantId, { tenantId, deletedAt: null, status: { in: PAYABLE_STATUSES } }),
+        this.sumBalance(tx, tenantId, {
+          tenantId,
+          deletedAt: null,
+          status: { in: PAYABLE_STATUSES },
+          dueDate: { lt: today },
+        }),
+      ]);
+
+      const invoicedWhere: Prisma.InvoiceWhereInput = {
+        tenantId,
+        deletedAt: null,
+        status: { in: ['ISSUED', 'PARTIALLY_PAID', 'PAID'] },
+        ...(options.from || options.to
+          ? {
+              createdAt: {
+                ...(options.from ? { gte: new Date(options.from) } : {}),
+                ...(options.to ? { lt: new Date(options.to) } : {}),
+              },
+            }
+          : {}),
+      };
+      const invoicedAgg = await tx.invoice.aggregate({ where: invoicedWhere, _sum: { totalAmount: true } });
+
+      return {
+        outstandingAmount: outstanding.balance,
+        overdueAmount: overdue.balance,
+        overdueInvoiceCount: overdue.count,
+        invoicedAmount: (invoicedAgg._sum.totalAmount ?? new Prisma.Decimal(0)).toString(),
+      };
+    });
+  }
+
+  /** Composable, always runs inside getSummary's own transaction - resolves gross totalAmount for `where`, then nets out PaymentAllocation/CreditNote sums for exactly those invoices. */
+  private async sumBalance(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    where: Prisma.InvoiceWhereInput,
+  ): Promise<{ balance: string; count: number }> {
+    const [agg, matched] = await Promise.all([
+      tx.invoice.aggregate({ where, _sum: { totalAmount: true } }),
+      tx.invoice.findMany({ where, select: { id: true } }),
+    ]);
+    const invoiceIds = matched.map((i) => i.id);
+
+    const [allocationAgg, creditAgg] = invoiceIds.length
+      ? await Promise.all([
+          tx.paymentAllocation.aggregate({
+            where: { tenantId, invoiceId: { in: invoiceIds }, deletedAt: null },
+            _sum: { amountApplied: true },
+          }),
+          tx.creditNote.aggregate({
+            where: { tenantId, invoiceId: { in: invoiceIds }, deletedAt: null },
+            _sum: { amount: true },
+          }),
+        ])
+      : [{ _sum: { amountApplied: null } }, { _sum: { amount: null } }];
+
+    const gross = agg._sum.totalAmount ?? new Prisma.Decimal(0);
+    const applied = allocationAgg._sum.amountApplied ?? new Prisma.Decimal(0);
+    const credited = creditAgg._sum.amount ?? new Prisma.Decimal(0);
+    return { balance: gross.minus(applied).minus(credited).toString(), count: invoiceIds.length };
+  }
+
   findOneOrThrow(tenantId: string, id: string) {
     return withTenantContext(this.prisma, tenantId, async (tx) => {
       const tenant = await findOrThrow('Tenant', tenantId, () =>

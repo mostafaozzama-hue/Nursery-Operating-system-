@@ -8,6 +8,8 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateLineItemDto } from './dto/create-line-item.dto';
 import { InvoiceQueryDto } from './dto/invoice-query.dto';
 import { InvoiceResponseDto } from './dto/invoice-response.dto';
+import { InvoiceSummaryQueryDto } from './dto/invoice-summary-query.dto';
+import { InvoiceSummaryResponseDto } from './dto/invoice-summary-response.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { LineItemQueryDto } from './dto/line-item-query.dto';
 import { LineItemResponseDto } from './dto/line-item-response.dto';
@@ -48,6 +50,19 @@ export class InvoiceController {
   @ApiPaginatedResponse(InvoiceResponseDto)
   findAll(@Query() query: InvoiceQueryDto) {
     return this.invoiceService.findAll(query);
+  }
+
+  /**
+   * Registered before `:id` deliberately - Nest matches routes in
+   * declaration order, so 'summary' would otherwise be captured by the
+   * `:id` route below and fail ParseUUIDPipe.
+   */
+  @Get('summary')
+  @Roles('OWNER', 'ADMIN')
+  @ApiOperation({ summary: 'Owner Dashboard financial snapshot: outstanding/overdue balances (as-of-now) and invoiced amount for an optional period' })
+  @ApiResponse({ status: 200, type: InvoiceSummaryResponseDto })
+  getSummary(@Query() query: InvoiceSummaryQueryDto) {
+    return this.invoiceService.getSummary(query);
   }
 
   @Get(':id')

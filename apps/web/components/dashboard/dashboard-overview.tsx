@@ -2,6 +2,7 @@
 
 import { AttentionList } from '@/components/dashboard/attention-list';
 import { Birthdays } from '@/components/dashboard/birthdays';
+import { FinancialSnapshot } from '@/components/dashboard/financial-snapshot';
 import { QuickActions } from '@/components/dashboard/quick-actions';
 import { RecentActivity } from '@/components/dashboard/recent-activity';
 import { StatCards } from '@/components/dashboard/stat-cards';
@@ -15,9 +16,15 @@ import { useDashboardOverview } from '@/lib/dashboard/queries';
  * Dashboard v1 (design-system.md §12) - the Admin Workspace's "control
  * center", replacing the PagePlaceholder tracked as UXD-3. A composition of
  * independent widgets over data already available from existing modules -
- * no new backend endpoints, no charts, no reports, no settings. See
- * useDashboardOverview for exactly which existing list endpoints power each
- * widget and why.
+ * no charts, no reports, no settings. See useDashboardOverview for exactly
+ * which endpoints power each widget and why.
+ *
+ * FinancialSnapshot (Outstanding/Overdue/Collected/Invoiced) is the one
+ * addition from the approved "Owner Dashboard - Financial Snapshot" phase
+ * on top of v1 - it's the only widget here backed by two new,
+ * OWNER/ADMIN-only summary endpoints (GET /invoices/summary,
+ * GET /payments/summary) rather than v1's original client-side-only
+ * aggregation; every other widget is unchanged.
  */
 export function DashboardOverview() {
   const { user } = useAuth();
@@ -46,6 +53,8 @@ export function DashboardOverview() {
       <PageTitle>Overview</PageTitle>
 
       {canManage && <QuickActions />}
+
+      {canManage && <FinancialSnapshot overview={data} />}
 
       <StatCards overview={data} />
 
